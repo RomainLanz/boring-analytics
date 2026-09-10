@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+step() {
+	printf '\n==> %s\n' "$1"
+}
+
+step 'Checking Node.js'
+node_major="$(node --version | sed -E 's/^v([0-9]+).*/\1/')"
+if ((node_major < 24)); then
+	echo 'Boring Analytics requires Node.js 24 or newer.' >&2
+	exit 1
+fi
+
+step 'Installing PostgreSQL when missing'
+if ! command -v pg_isready >/dev/null 2>&1; then
+	sudo apt-get update
+	sudo apt-get install -y postgresql postgresql-client
+fi
+
+sudo systemctl enable --now postgresql
+for _ in {1..15}; do
+	if pg_isready -q; then
+		break
+	fi
+	sleep 1
+done
+pg_isready -q
+
+step 'Configuring local databases'
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'app'" | grep -qx 1; then
+	sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE app LOGIN PASSWORD 'app'"
+fi
+
+for database in app app_test; do
+	if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$database'" | grep -qx 1; then
+		sudo -u postgres createdb --owner app "$database"
+	fi
+done
+
+step 'Installing JavaScript dependencies'
+corepack enable
+corepack yarn install --immutable
+
+# Oxlint JavaScript plugins reserve a large virtual address range. Small Linux
+# orbs must allow memory overcommit even though the pages are never committed.
+if ! grep -qx 'vm.overcommit_memory=1' /etc/sysctl.d/99-boring-analytics.conf 2>/dev/null; then
+	echo 'vm.overcommit_memory=1' | sudo tee /etc/sysctl.d/99-boring-analytics.conf >/dev/null
+fi
+
+if [[ "$(cat /proc/sys/vm/overcommit_memory)" != '1' ]]; then
+	sudo sysctl -q -w vm.overcommit_memory=1
+fi
+
+step 'Preparing the application environment'
+if [[ ! -f apps/web/.env ]]; then
+	cp -- apps/web/.env.example apps/web/.env
+fi
+
+if grep -q '^APP_KEY=$' apps/web/.env; then
+	corepack yarn workspace @boring-analytics/web exec node ace generate:key
+fi
+
+step 'Applying database migrations'
+corepack yarn workspace @boring-analytics/web db:migrate
+
+echo 'Setup complete. Amp starts the web application from .amp/services.yaml.'

@@ -1,0 +1,8 @@
+services:
+  web:
+    command: corepack yarn dev
+    env:
+      HOST: 0.0.0.0
+    health: /
+    portal:
+      title: Boring Analytics
