@@ -1,23 +1,21 @@
 import router from '@adonisjs/core/services/router';
-import { middleware } from '#start/kernel';
-
-const LoginController = () => import('#app/identity/controllers/login_controller');
-const RegisterUserController = () => import('#app/identity/controllers/register_user_controller');
-const LogoutController = () => import('#app/identity/controllers/logout_controller');
-const AccountController = () => import('#app/identity/controllers/account_controller');
+import { controllers } from '#generated/controllers';
+import { middleware, webMiddleware } from '#start/kernel';
 
 router
 	.group(() => {
-		router.get('signup', [RegisterUserController, 'render']).as('new_account.create');
-		router.post('signup', [RegisterUserController, 'execute']).as('new_account.store');
-		router.get('login', [LoginController, 'render']).as('session.create');
-		router.post('login', [LoginController, 'execute']).as('session.store');
+		router.get('signup', [controllers.identity.RegisterUser, 'render']).as('new_account.create');
+		router.post('signup', [controllers.identity.RegisterUser, 'execute']).as('new_account.store');
+		router.get('login', [controllers.identity.Login, 'render']).as('session.create');
+		router.post('login', [controllers.identity.Login, 'execute']).as('session.store');
 	})
+	.use(webMiddleware)
 	.use(middleware.guest());
 
 router
 	.group(() => {
-		router.get('account', [AccountController, 'render']).as('account.show');
-		router.post('logout', [LogoutController, 'execute']).as('session.destroy');
+		router.get('account', [controllers.identity.Account, 'render']).as('account.show');
+		router.post('logout', [controllers.identity.Logout, 'execute']).as('session.destroy');
 	})
+	.use(webMiddleware)
 	.use(middleware.auth());

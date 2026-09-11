@@ -79,6 +79,54 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/identity/controllers/logout_controller').default['execute']>>>
     }
   }
+  'websites.create': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/new'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/create_website_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/create_website_controller').default['render']>>>
+    }
+  }
+  'websites.store': {
+    methods: ["POST"]
+    pattern: '/websites'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#app/websites/controllers/create_website_controller').default)['validator']>>
+      paramsTuple: []
+      params: {}
+      query: ExtractQuery<InferInput<(typeof import('#app/websites/controllers/create_website_controller').default)['validator']>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/create_website_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/create_website_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'websites.show': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/website_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/website_controller').default['render']>>>
+    }
+  }
+  'events.store': {
+    methods: ["POST"]
+    pattern: '/api/events'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#app/collection/controllers/record_pageview_controller').default)['validator']>>
+      paramsTuple: []
+      params: {}
+      query: ExtractQuery<InferInput<(typeof import('#app/collection/controllers/record_pageview_controller').default)['validator']>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/record_pageview_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_pageview_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
   'home': {
     methods: ["GET","HEAD"]
     pattern: '/'

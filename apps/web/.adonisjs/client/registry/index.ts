@@ -42,6 +42,30 @@ const routes = {
     tokens: [{"old":"/logout","type":0,"val":"logout","end":""}],
     types: placeholder as Registry['session.destroy']['types'],
   },
+  'websites.create': {
+    methods: ["GET","HEAD"],
+    pattern: '/websites/new',
+    tokens: [{"old":"/websites/new","type":0,"val":"websites","end":""},{"old":"/websites/new","type":0,"val":"new","end":""}],
+    types: placeholder as Registry['websites.create']['types'],
+  },
+  'websites.store': {
+    methods: ["POST"],
+    pattern: '/websites',
+    tokens: [{"old":"/websites","type":0,"val":"websites","end":""}],
+    types: placeholder as Registry['websites.store']['types'],
+  },
+  'websites.show': {
+    methods: ["GET","HEAD"],
+    pattern: '/websites/:id',
+    tokens: [{"old":"/websites/:id","type":0,"val":"websites","end":""},{"old":"/websites/:id","type":1,"val":"id","end":""}],
+    types: placeholder as Registry['websites.show']['types'],
+  },
+  'events.store': {
+    methods: ["POST"],
+    pattern: '/api/events',
+    tokens: [{"old":"/api/events","type":0,"val":"api","end":""},{"old":"/api/events","type":0,"val":"events","end":""}],
+    types: placeholder as Registry['events.store']['types'],
+  },
   'home': {
     methods: ["GET","HEAD"],
     pattern: '/',

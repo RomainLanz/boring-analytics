@@ -5,6 +5,7 @@ import { EmailAddress, type InvalidEmailAddressError } from '#identity/domain/em
 import { UserIdentifier } from '#identity/domain/user_identifier';
 import { UserRepository, type CreateUserError } from '#identity/repositories/user_repository';
 import { TransactionManager } from '#shared/services/transaction_manager';
+import { WorkspaceRepository } from '#websites/repositories/workspace_repository';
 import type { Result } from '#core/result';
 import type { User } from '#identity/domain/user';
 
@@ -24,6 +25,7 @@ export type RegisterUserResult = Result<User, RegisterUserError>;
 export class RegisterUser {
 	constructor(
 		private readonly users: UserRepository,
+		private readonly workspaces: WorkspaceRepository,
 		private readonly transactions: TransactionManager,
 	) {}
 
@@ -39,12 +41,18 @@ export class RegisterUser {
 		}
 
 		return this.transactions.run(async () => {
-			return this.users.createUser({
+			const result = await this.users.createUser({
 				id: UserIdentifier.generate(),
 				name: params.name?.trim() || null,
 				email: email.value,
 				passwordHash: await hash.make(params.password),
 			});
+
+			if (result.ok) {
+				await this.workspaces.createPersonalWorkspace(result.value.id);
+			}
+
+			return result;
 		});
 	}
 }

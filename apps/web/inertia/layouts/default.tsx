@@ -32,6 +32,12 @@ export default function Layout({ children }: { children: ReactElement }) {
 						{props.user ? (
 							<>
 								<Link
+									route="websites.create"
+									className="text-muted hover:text-ink rounded-control hidden px-3 py-2 text-sm font-medium transition-colors sm:block"
+								>
+									Add website
+								</Link>
+								<Link
 									route="account.show"
 									className="text-muted hover:text-ink rounded-control hidden px-3 py-2 text-sm font-medium transition-colors sm:block"
 								>

@@ -4,10 +4,17 @@
  */
 
 export const controllers = {
+  collection: {
+    RecordPageview: () => import('#app/collection/controllers/record_pageview_controller'),
+  },
   identity: {
     Account: () => import('#app/identity/controllers/account_controller'),
     Login: () => import('#app/identity/controllers/login_controller'),
     Logout: () => import('#app/identity/controllers/logout_controller'),
     RegisterUser: () => import('#app/identity/controllers/register_user_controller'),
+  },
+  websites: {
+    CreateWebsite: () => import('#app/websites/controllers/create_website_controller'),
+    Website: () => import('#app/websites/controllers/website_controller'),
   },
 }

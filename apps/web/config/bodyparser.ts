@@ -28,9 +28,21 @@ const bodyParserConfig = defineConfig({
 	 */
 	json: {
 		/**
+		 * The collection contract allows a 2,048-character path. All current
+		 * JSON endpoints fit within this bound with protocol overhead.
+		 */
+		limit: '4kb',
+
+		/**
 		 * Normalize empty string values to null.
 		 */
 		convertEmptyStringsToNull: true,
+
+		/**
+		 * Preserve submitted strings so endpoint validators can reject rather
+		 * than silently repair leading or trailing whitespace.
+		 */
+		trimWhitespaces: false,
 
 		/**
 		 * Content types handled by the JSON parser.

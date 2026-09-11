@@ -41,6 +41,7 @@ done
 step 'Installing JavaScript dependencies'
 corepack enable
 corepack yarn install --immutable
+corepack yarn workspace @boring-analytics/web exec playwright install chromium
 
 # Oxlint JavaScript plugins reserve a large virtual address range. Small Linux
 # orbs must allow memory overcommit even though the pages are never committed.

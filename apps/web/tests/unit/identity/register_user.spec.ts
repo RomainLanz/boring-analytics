@@ -6,6 +6,7 @@ import { User } from '#identity/domain/user';
 import type { UserIdentifier } from '#identity/domain/user_identifier';
 import type { UserRepository } from '#identity/repositories/user_repository';
 import type { TransactionManager } from '#shared/services/transaction_manager';
+import type { WorkspaceRepository } from '#websites/repositories/workspace_repository';
 
 interface CreateUserPayload {
 	id: UserIdentifier;
@@ -27,7 +28,7 @@ test.group('RegisterUser', () => {
 			},
 		};
 		// SAFETY: Invalid input returns before RegisterUser can access the repository.
-		const registerUser = new RegisterUser({} as UserRepository, transactions);
+		const registerUser = new RegisterUser({} as UserRepository, {} as WorkspaceRepository, transactions);
 
 		const result = await registerUser.execute({
 			name: 'Ada Lovelace',
@@ -51,7 +52,7 @@ test.group('RegisterUser', () => {
 			},
 		};
 		// SAFETY: Invalid input returns before RegisterUser can access the repository.
-		const registerUser = new RegisterUser({} as UserRepository, transactions);
+		const registerUser = new RegisterUser({} as UserRepository, {} as WorkspaceRepository, transactions);
 
 		const result = await registerUser.execute({
 			name: 'Ada Lovelace',
@@ -65,6 +66,7 @@ test.group('RegisterUser', () => {
 
 	test('normalizes user data before persistence', async ({ assert }) => {
 		let receivedPayload: CreateUserPayload | undefined;
+		let workspaceOwnerId: string | undefined;
 		// SAFETY: RegisterUser only calls `createUser` on its repository dependency.
 		const users = {
 			createUser(payload: CreateUserPayload) {
@@ -86,7 +88,13 @@ test.group('RegisterUser', () => {
 				return callback();
 			},
 		} as TransactionManager;
-		const registerUser = new RegisterUser(users, transactions);
+		const workspaces = {
+			createPersonalWorkspace(ownerUserId: string) {
+				workspaceOwnerId = ownerUserId;
+				return Promise.resolve();
+			},
+		} as WorkspaceRepository;
+		const registerUser = new RegisterUser(users, workspaces, transactions);
 
 		const result = await registerUser.execute({
 			name: '  Ada Lovelace  ',
@@ -98,5 +106,6 @@ test.group('RegisterUser', () => {
 		assert.equal(receivedPayload?.name, 'Ada Lovelace');
 		assert.equal(receivedPayload?.email.toString(), 'ada@example.com');
 		assert.notEqual(receivedPayload?.passwordHash, 'a-secure-password');
+		assert.equal(workspaceOwnerId, result.ok ? result.value.id : undefined);
 	});
 });

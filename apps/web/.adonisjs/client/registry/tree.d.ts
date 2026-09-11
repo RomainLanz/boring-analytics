@@ -14,5 +14,13 @@ export interface ApiDefinition {
   account: {
     show: typeof routes['account.show']
   }
+  websites: {
+    create: typeof routes['websites.create']
+    store: typeof routes['websites.store']
+    show: typeof routes['websites.show']
+  }
+  events: {
+    store: typeof routes['events.store']
+  }
   home: typeof routes['home']
 }

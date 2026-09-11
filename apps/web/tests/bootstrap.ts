@@ -1,4 +1,5 @@
 import { authBrowserClient } from '@adonisjs/auth/plugins/browser_client';
+import ace from '@adonisjs/core/services/ace';
 import app from '@adonisjs/core/services/app';
 import testUtils from '@adonisjs/core/services/test_utils';
 import { sessionBrowserClient } from '@adonisjs/session/plugins/browser_client';
@@ -41,6 +42,13 @@ export const runnerHooks: Required<Pick<Config, 'setup' | 'teardown'>> = {
  */
 export const configureSuite: Config['configureSuite'] = (suite) => {
 	if (['browser', 'functional', 'e2e'].includes(suite.name)) {
-		return suite.setup(() => testUtils.httpServer().start());
+		suite.setup(async () => {
+			const migration = await ace.exec('migrate', []);
+
+			if (migration.exitCode) {
+				throw migration.error ?? new Error('Test database migrations failed');
+			}
+		});
+		suite.setup(() => testUtils.httpServer().start());
 	}
 };

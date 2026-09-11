@@ -1,4 +1,3 @@
-import app from '@adonisjs/core/services/app';
 import { defineConfig } from '@adonisjs/cors';
 
 /**
@@ -9,27 +8,25 @@ import { defineConfig } from '@adonisjs/cors';
  */
 const corsConfig = defineConfig({
 	/**
-	 * Enable or disable CORS handling globally.
+	 * Only the public collection endpoint is called cross-origin.
 	 */
-	enabled: true,
+	enabled: ({ request }) => request.url() === '/api/events',
 
 	/**
-	 * In development, allow every origin to simplify local front/backend setup.
-	 * In production, keep an explicit allowlist (empty by default, so no
-	 * cross-origin browser access is allowed until configured).
+	 * Collection requests may come from any configured Website. The endpoint
+	 * enforces each Website's domain allowlist before accepting an event.
 	 */
-	origin: app.inDev ? true : [],
+	origin: true,
 
 	/**
 	 * HTTP methods accepted for cross-origin requests.
 	 */
-	methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
+	methods: ['POST'],
 
 	/**
-	 * Reflect request headers by default. Use a string array to restrict
-	 * allowed headers.
+	 * JSON is the only request content accepted by the collection endpoint.
 	 */
-	headers: true,
+	headers: ['Content-Type'],
 
 	/**
 	 * Response headers exposed to the browser.
@@ -39,7 +36,7 @@ const corsConfig = defineConfig({
 	/**
 	 * Allow cookies/authorization headers on cross-origin requests.
 	 */
-	credentials: true,
+	credentials: false,
 
 	/**
 	 * Cache CORS preflight response for N seconds.

@@ -7,8 +7,10 @@
   "imports": {
     "#app/*": "./app/*.js",
     "#core/*": "./src/core/*.js",
+    "#collection/*": "./src/events/*.js",
     "#identity/*": "./src/identity/*.js",
     "#shared/*": "./src/shared/*.js",
+    "#websites/*": "./src/websites/*.js",
     "#generated/*": "./.adonisjs/server/*.js",
     "#providers/*": "./providers/*.js",
     "#database/*": "./database/*.js",
@@ -33,6 +35,7 @@
     "@adonisjs/core": "^7.4.0",
     "@adonisjs/cors": "^3.0.0",
     "@adonisjs/inertia": "^5.0.0",
+    "@adonisjs/limiter": "^3.0.1",
     "@adonisjs/session": "^8.1.0",
     "@adonisjs/shield": "^9.0.0",
     "@adonisjs/static": "^2.0.1",
