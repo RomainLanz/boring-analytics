@@ -25,7 +25,7 @@ export class WebsiteDetailsQuery {
 				'websites.name',
 				'websites.tracking_id',
 				'websites.allowed_domain',
-				sql<number>`count(events.id)::integer`.as('pageviews'),
+				sql<number>`count(events.id) filter (where events.name = '$pageview')::integer`.as('pageviews'),
 			])
 			.where('websites.id', '=', websiteId)
 			.where('workspaces.owner_user_id', '=', ownerUserId)

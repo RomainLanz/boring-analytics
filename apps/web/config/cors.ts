@@ -24,7 +24,7 @@ const corsConfig = defineConfig({
 	methods: ['POST'],
 
 	/**
-	 * JSON is the only request content accepted by the collection endpoint.
+	 * Both sendBeacon and the fetch fallback submit the strict JSON contract.
 	 */
 	headers: ['Content-Type'],
 
@@ -34,9 +34,10 @@ const corsConfig = defineConfig({
 	exposeHeaders: [],
 
 	/**
-	 * Allow cookies/authorization headers on cross-origin requests.
+	 * sendBeacon always uses the browser's credentials mode "include". The
+	 * collection route does not read sessions, cookies, or authorization.
 	 */
-	credentials: false,
+	credentials: true,
 
 	/**
 	 * Cache CORS preflight response for N seconds.

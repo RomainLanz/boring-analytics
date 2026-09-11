@@ -10,6 +10,7 @@ export default {
 		'**/build/**',
 		'**/tmp/**',
 		'**/public/assets/**',
+		'apps/web/public/tracker.js',
 		'**/storybook-static/**',
 		'**/package.json',
 		'.agent/**',

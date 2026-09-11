@@ -21,6 +21,9 @@ const env = await Env.create(new URL('../', import.meta.url), {
 	// App
 	APP_KEY: Env.schema.secret(),
 	APP_URL: Env.schema.string({ format: 'url', tld: false }),
+	ANONYMOUS_ID_SECRET: Env.schema.secret(),
+	EVENT_TIME_TOLERANCE_HOURS: Env.schema.number(),
+	TRUST_PROXY: Env.schema.string(),
 
 	// Database
 	DATABASE_URL: Env.schema.secret(),
@@ -28,6 +31,14 @@ const env = await Env.create(new URL('../', import.meta.url), {
 	// Session
 	SESSION_DRIVER: Env.schema.enum(['cookie', 'memory'] as const),
 });
+
+if (env.get('ANONYMOUS_ID_SECRET').release().length < 32) {
+	throw new Error('Invalid environment variable "ANONYMOUS_ID_SECRET": expected at least 32 characters');
+}
+
+if (!Number.isFinite(env.get('EVENT_TIME_TOLERANCE_HOURS')) || env.get('EVENT_TIME_TOLERANCE_HOURS') <= 0) {
+	throw new Error('Invalid environment variable "EVENT_TIME_TOLERANCE_HOURS": expected a positive number');
+}
 
 try {
 	const databaseUrl = new URL(env.get('DATABASE_URL').release());

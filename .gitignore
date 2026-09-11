@@ -16,6 +16,7 @@ apps/*/tmp/*
 # Frontend assets compiled code
 public/assets
 apps/*/public/assets
+apps/web/public/tracker.js
 packages/*/storybook-static
 
 # Build tools specific

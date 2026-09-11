@@ -101,6 +101,8 @@ corepack enable
 yarn install
 cp apps/web/.env.example apps/web/.env
 yarn workspace @boring-analytics/web exec node ace generate:key
+anonymous_id_secret="$(openssl rand -hex 32)"
+sed -i.bak "s/^ANONYMOUS_ID_SECRET=$/ANONYMOUS_ID_SECRET=$anonymous_id_secret/" apps/web/.env && rm apps/web/.env.bak
 yarn docker:up
 yarn workspace @boring-analytics/web db:migrate
 yarn dev
@@ -165,6 +167,33 @@ yarn workspace @boring-analytics/web db:fresh
 ```
 
 This command is destructive. It refuses to run in production unless `--force` is passed explicitly.
+
+## Anonymous browser tracking
+
+Each Website page displays a self-contained `<script>` tag for the instance's `/tracker.js`. The tracker has no client
+framework dependency. It records the first page load and History API or `popstate` navigation, strips query strings and
+fragments from paths and referrers, honors Do Not Track, and writes no cookies or browser storage. It sends JSON using a
+cross-origin `sendBeacon` request and falls back to `fetch` with `keepalive`. The collection endpoint allows the
+credentialed CORS preflight required by `sendBeacon`, but does not read cookies, sessions, or authorization.
+
+Collection requests are limited to 4 KiB. For unusually long URLs, the tracker keeps the pathname and removes the
+referrer first, followed by campaign, medium, and source, until the request fits. It does not send paths longer than the
+2,048-character protocol limit.
+
+The server derives both anonymous identifiers from the Website ID, request IP, User-Agent, and
+`ANONYMOUS_ID_SECRET`. It stores only the HMAC results. `anonymous_id` rotates at UTC day boundaries. `session_id`
+rotates in fixed 30-minute windows. This simple session model may split an active visit at a window boundary, but it
+keeps identity derivation stateless and leaves no persistent browser identifier. Changing the secret immediately breaks
+linkage with prior windows; keep it out of source control and rotate it only when that break is intended.
+
+`EVENT_TIME_TOLERANCE_HOURS` bounds accepted client timestamps in both directions and defaults to 24 in the example
+environment. Existing installations must add the new variables before upgrading. The tolerance absorbs offline Beacon
+delivery and moderate clock skew without accepting arbitrarily old events.
+
+`TRUST_PROXY` is a comma-separated list using the `proxy-addr` names and CIDR syntax. It must contain only the reverse
+proxies allowed to provide `X-Forwarded-For`. The example trusts loopback and private network ranges for a local or
+containerized proxy. Use the exact ingress CIDRs when the application is reachable through public proxy addresses.
+Requests received directly from an untrusted address ignore forwarded IP headers.
 
 ## Adding a capability
 

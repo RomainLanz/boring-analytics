@@ -4,9 +4,15 @@ import { type Data } from '@generated/data';
 import { Head, Link } from '@inertiajs/react';
 import { type InertiaProps } from '~/types';
 
-type PageProps = InertiaProps<{ website: Data.Websites.WebsiteDetails }>;
+type PageProps = InertiaProps<{ website: Data.Websites.WebsiteDetails; trackerUrl: string }>;
 
-export default function ShowWebsite({ website }: PageProps) {
+export default function ShowWebsite({ website, trackerUrl }: PageProps) {
+	const integrationSnippet = `<script
+  defer
+  data-website-id="${website.trackingId}"
+  src="${trackerUrl}"
+></script>`;
+
 	return (
 		<>
 			<Head title={website.name} />
@@ -34,11 +40,14 @@ export default function ShowWebsite({ website }: PageProps) {
 				</div>
 
 				<Card className="mt-4">
-					<h2 className="text-ink text-lg font-semibold">Public tracking ID</h2>
-					<p className="text-muted mt-1 text-sm">Send this public identifier with pageviews from the allowed domain.</p>
-					<code className="bg-surface-muted text-ink rounded-control mt-4 block overflow-x-auto px-4 py-3 text-sm">
-						{website.trackingId}
-					</code>
+					<h2 className="text-ink text-lg font-semibold">Install the tracker</h2>
+					<p className="text-muted mt-1 text-sm">
+						Add this tag inside your site's <code>&lt;head&gt;</code>. It records page loads and SPA navigation without
+						cookies.
+					</p>
+					<pre className="bg-surface-muted text-ink rounded-control mt-4 px-4 py-3 text-sm break-all whitespace-pre-wrap">
+						<code>{integrationSnippet}</code>
+					</pre>
 				</Card>
 			</main>
 		</>

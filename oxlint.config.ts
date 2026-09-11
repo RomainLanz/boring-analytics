@@ -6,6 +6,7 @@ export default defineConfig({
 		'**/build/**',
 		'**/tmp/**',
 		'**/public/assets/**',
+		'apps/web/public/tracker.js',
 		'**/storybook-static/**',
 		'.agent/**',
 		'.agents/**',

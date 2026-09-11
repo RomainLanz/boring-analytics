@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import app from '@adonisjs/core/services/app';
 import { test } from '@japa/runner';
+import { EventSource } from '#collection/event_source';
 import { RegisterUser } from '#identity/actions/register_user';
 import { db } from '#shared/services/db';
 
@@ -39,10 +40,36 @@ test.group('Websites', (group) => {
 		assert.match(website.tracking_id, /^[0-9a-f-]{36}$/u);
 		await db
 			.insertInto('events')
-			.values({ id: randomUUID(), website_id: website.id, name: 'pageview', path: '/pricing' })
+			.values([
+				{
+					id: randomUUID(),
+					website_id: website.id,
+					name: '$pageview',
+					source: EventSource.Browser,
+					occurred_at: new Date(),
+					path: '/pricing',
+				},
+				{
+					id: randomUUID(),
+					website_id: website.id,
+					name: 'signup',
+					source: EventSource.Browser,
+					occurred_at: new Date(),
+					path: '/signup',
+				},
+			])
 			.execute();
 		await createPage.reload();
 		await createPage.assertText('main p.text-4xl', '1');
+		await createPage.assertText('h2', 'Install the tracker');
+		await createPage.assertText(
+			'pre code',
+			`<script
+  defer
+  data-website-id="${website.tracking_id}"
+  src="http://localhost:3333/tracker.js"
+></script>`,
+		);
 
 		await browserContext.loginAs(outsiderResult.value);
 		const forbiddenPage = await browserContext.newPage();

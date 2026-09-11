@@ -58,8 +58,25 @@ if [[ ! -f apps/web/.env ]]; then
 	cp -- apps/web/.env.example apps/web/.env
 fi
 
+if ! grep -q '^ANONYMOUS_ID_SECRET=' apps/web/.env; then
+	printf '\nANONYMOUS_ID_SECRET=\n' >> apps/web/.env
+fi
+
+if ! grep -q '^EVENT_TIME_TOLERANCE_HOURS=' apps/web/.env; then
+	printf 'EVENT_TIME_TOLERANCE_HOURS=24\n' >> apps/web/.env
+fi
+
+if ! grep -q '^TRUST_PROXY=' apps/web/.env; then
+	printf 'TRUST_PROXY=loopback, linklocal, uniquelocal\n' >> apps/web/.env
+fi
+
 if grep -q '^APP_KEY=$' apps/web/.env; then
 	corepack yarn workspace @boring-analytics/web exec node ace generate:key
+fi
+
+if grep -q '^ANONYMOUS_ID_SECRET=$' apps/web/.env; then
+	anonymous_id_secret="$(openssl rand -hex 32)"
+	sed -i "s/^ANONYMOUS_ID_SECRET=$/ANONYMOUS_ID_SECRET=$anonymous_id_secret/" apps/web/.env
 fi
 
 step 'Applying database migrations'

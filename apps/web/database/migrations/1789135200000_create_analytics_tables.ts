@@ -24,15 +24,30 @@ export async function up(db: Kysely<unknown>) {
 		.addColumn('id', 'uuid', (column) => column.primaryKey())
 		.addColumn('website_id', 'uuid', (column) => column.notNull().references('websites.id').onDelete('cascade'))
 		.addColumn('name', 'text', (column) => column.notNull())
+		.addColumn('source', 'smallint', (column) => column.notNull())
+		.addColumn('occurred_at', 'timestamptz', (column) => column.notNull())
 		.addColumn('path', 'text', (column) => column.notNull())
+		.addColumn('anonymous_id', 'text')
+		.addColumn('session_id', 'text')
+		.addColumn('referrer', 'text')
+		.addColumn('utm_source', 'text')
+		.addColumn('utm_medium', 'text')
+		.addColumn('utm_campaign', 'text')
 		.addColumn('received_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
-		.addCheckConstraint('events_name_check', sql`name = 'pageview'`)
+		.addCheckConstraint('events_source_check', sql`source in (1, 2)`)
 		.execute();
 
 	await db.schema
 		.createIndex('events_website_received_at_index')
 		.on('events')
 		.columns(['website_id', 'received_at'])
+		.execute();
+
+	await db.schema
+		.createIndex('events_website_session_id_index')
+		.on('events')
+		.columns(['website_id', 'session_id'])
+		.where('session_id', 'is not', null)
 		.execute();
 }
 

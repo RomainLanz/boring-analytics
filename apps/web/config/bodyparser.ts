@@ -1,4 +1,5 @@
 import { defineConfig } from '@adonisjs/core/bodyparser';
+import { pageviewProtocol } from '#collection/pageview_protocol';
 
 const bodyParserConfig = defineConfig({
 	/**
@@ -28,10 +29,10 @@ const bodyParserConfig = defineConfig({
 	 */
 	json: {
 		/**
-		 * The collection contract allows a 2,048-character path. All current
-		 * JSON endpoints fit within this bound with protocol overhead.
+		 * A single collection event, including its path, referrer, and campaign
+		 * fields, must fit within this hard payload limit.
 		 */
-		limit: '4kb',
+		limit: `${pageviewProtocol.maxPayloadBytes}b`,
 
 		/**
 		 * Normalize empty string values to null.

@@ -12,10 +12,18 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 export interface Events {
+  anonymous_id: string | null;
   id: string;
   name: string;
+  occurred_at: Timestamp;
   path: string;
   received_at: Generated<Timestamp>;
+  referrer: string | null;
+  session_id: string | null;
+  source: number;
+  utm_campaign: string | null;
+  utm_medium: string | null;
+  utm_source: string | null;
   website_id: string;
 }
 

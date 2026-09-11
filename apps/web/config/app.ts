@@ -1,5 +1,6 @@
-import { defineConfig, type HttpRequest } from '@adonisjs/core/http';
+import { defineConfig } from '@adonisjs/core/http';
 import app from '@adonisjs/core/services/app';
+import proxyaddr from 'proxy-addr';
 import env from '#start/env';
 
 /**
@@ -9,23 +10,20 @@ import env from '#start/env';
  */
 export const appUrl = env.get('APP_URL');
 
-function getIp(request: HttpRequest) {
-	const cloudflareIp = request.header('CF-Connecting-IP');
-
-	return cloudflareIp ?? request.ips()[0];
-}
-
 /**
  * The configuration settings used by the HTTP server
  */
 export const http = defineConfig({
 	/**
-	 * Production traffic must reach the app exclusively through a proxy that
-	 * replaces forwarding headers. Otherwise clients could forge the IP used
-	 * by security controls such as rate limiting.
+	 * Only forwarding headers from explicitly trusted reverse proxies affect
+	 * request.ip(), which feeds collection rate limits and anonymous identity.
 	 */
-	trustProxy: app.inProduction,
-	getIp,
+	trustProxy: proxyaddr.compile(
+		env
+			.get('TRUST_PROXY')
+			.split(',')
+			.map((proxy) => proxy.trim()),
+	),
 
 	/**
 	 * Generate a unique request id for each incoming request.

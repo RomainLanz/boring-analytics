@@ -1,5 +1,6 @@
 import { inject } from '@adonisjs/core';
 import WebsiteDetailsTransformer from '#app/websites/transformers/website_details_transformer';
+import { appUrl } from '#config/app';
 import { WebsiteDetailsQuery } from '#websites/queries/website_details_query';
 import type { HttpContext } from '@adonisjs/core/http';
 
@@ -16,6 +17,7 @@ export default class WebsiteController {
 
 		return inertia.render('websites/show', {
 			website: WebsiteDetailsTransformer.transform(website),
+			trackerUrl: new URL('/tracker.js', appUrl).href,
 		});
 	}
 }
