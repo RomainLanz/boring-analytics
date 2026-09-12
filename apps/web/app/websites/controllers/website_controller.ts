@@ -1,22 +1,22 @@
 import { inject } from '@adonisjs/core';
-import WebsiteDetailsTransformer from '#app/websites/transformers/website_details_transformer';
+import WebsiteOverviewTransformer from '#app/websites/transformers/website_overview_transformer';
 import { appUrl } from '#config/app';
-import { WebsiteDetailsQuery } from '#websites/queries/website_details_query';
+import { WebsiteOverviewQuery } from '#websites/queries/website_overview_query';
 import type { HttpContext } from '@adonisjs/core/http';
 
 @inject()
 export default class WebsiteController {
-	constructor(private readonly websiteDetails: WebsiteDetailsQuery) {}
+	constructor(private readonly websiteOverview: WebsiteOverviewQuery) {}
 
 	async render({ auth, inertia, params, response }: HttpContext) {
-		const website = await this.websiteDetails.execute(params.id, auth.getUserOrFail().id);
+		const overview = await this.websiteOverview.execute(params.id, auth.getUserOrFail().id);
 
-		if (!website) {
+		if (!overview) {
 			return response.notFound();
 		}
 
 		return inertia.render('websites/show', {
-			website: WebsiteDetailsTransformer.transform(website),
+			overview: WebsiteOverviewTransformer.transform(overview),
 			trackerUrl: new URL('/tracker.js', appUrl).href,
 		});
 	}

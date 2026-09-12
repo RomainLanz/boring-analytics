@@ -41,6 +41,7 @@ export interface Websites {
   created_at: Generated<Timestamp>;
   id: string;
   name: string;
+  timezone: Generated<string>;
   tracking_id: string;
   workspace_id: string;
 }
