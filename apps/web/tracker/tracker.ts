@@ -4,6 +4,7 @@ import {
 	browserEventProtocol,
 	customEventNamePattern,
 	isValidDistinctId,
+	isValidEventId,
 	isValidEventProperties,
 	normalizeBrowserEventPath,
 } from '#collection/browser_event_protocol';
@@ -12,7 +13,8 @@ import type { EventProperties } from '#collection/browser_event_protocol';
 declare global {
 	interface Window {
 		boringAnalytics?: {
-			track(name: string, properties?: EventProperties): boolean;
+			track(name: string, properties?: EventProperties, options?: { eventId?: string }): boolean;
+			trackBatch(events: { name: string; properties?: EventProperties; eventId?: string }[]): boolean;
 			setDistinctId(distinctId: string): boolean;
 			identify(distinctId: string): boolean;
 		};
@@ -52,11 +54,11 @@ if (script && trackingId) {
 		return parameter && !/\p{Cc}/u.test(parameter) ? parameter : null;
 	}
 
-	function send(event: object) {
+	function send(event: object, maxPayloadBytes = browserEventProtocol.maxPayloadBytes) {
 		const body = JSON.stringify(event);
 		const payload = new Blob([body], { type: 'application/json' });
 
-		if (payload.size > browserEventProtocol.maxPayloadBytes) {
+		if (payload.size > maxPayloadBytes) {
 			return false;
 		}
 
@@ -81,7 +83,7 @@ if (script && trackingId) {
 		return path.length <= browserEventProtocol.maxPathLength ? path : null;
 	}
 
-	function collectCustomEvent(name: string, properties: EventProperties = {}) {
+	function customEvent(name: string, properties: EventProperties, eventId?: string) {
 		const path = currentPath();
 
 		if (
@@ -90,19 +92,54 @@ if (script && trackingId) {
 			typeof name !== 'string' ||
 			name.length > browserEventProtocol.maxNameLength ||
 			!customEventNamePattern.test(name) ||
-			!isValidEventProperties(properties)
+			!isValidEventProperties(properties) ||
+			(eventId !== undefined && !isValidEventId(eventId))
 		) {
-			return false;
+			return null;
 		}
 
-		return send({
-			trackingId,
+		return {
 			distinctId,
+			eventId,
 			name,
 			occurredAt: new Date().toISOString(),
 			path,
 			properties: { ...properties },
-		});
+		};
+	}
+
+	function collectCustomEvent(name: string, properties: EventProperties = {}, options: { eventId?: string } = {}) {
+		if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+			return false;
+		}
+
+		const event = customEvent(name, properties, options.eventId);
+		return event !== null && send({ trackingId, ...event });
+	}
+
+	function collectCustomEventBatch(events: { name: string; properties?: EventProperties; eventId?: string }[]) {
+		if (!Array.isArray(events) || events.length < 1 || events.length > browserEventProtocol.maxBatchEvents) {
+			return false;
+		}
+
+		const payload = [];
+
+		for (let index = 0; index < events.length; index++) {
+			const submittedEvent: unknown = events[index];
+
+			if (typeof submittedEvent !== 'object' || submittedEvent === null) {
+				return false;
+			}
+
+			const { name, properties = {}, eventId } = submittedEvent as (typeof events)[number];
+			payload.push(customEvent(name, properties, eventId));
+		}
+
+		if (payload.some((event) => event === null)) {
+			return false;
+		}
+
+		return send({ trackingId, events: payload }, browserEventProtocol.maxBatchPayloadBytes);
 	}
 
 	function collectPageview() {
@@ -193,6 +230,6 @@ if (script && trackingId) {
 			collectPageview();
 		}
 	});
-	window.boringAnalytics = { track: collectCustomEvent, setDistinctId, identify };
+	window.boringAnalytics = { track: collectCustomEvent, trackBatch: collectCustomEventBatch, setDistinctId, identify };
 	collectPageview();
 }

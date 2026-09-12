@@ -74,6 +74,79 @@ test.group('POST /api/server/events', (group) => {
 		assert.deepEqual(event, { distinct_id: 'account_opaque_42', anonymous_id: null, session_id: null });
 	});
 
+	test('accepts an atomic batch and deduplicates event_id against single and concurrent requests', async ({
+		assert,
+	}) => {
+		const website = await createWebsite();
+		const createServerKey = await app.container.make(CreateServerKey);
+		const created = await createServerKey.execute(website);
+
+		if (!created.ok) {
+			throw new Error('The server key must be created');
+		}
+
+		const eventId = 'invoice_01J8ZV7Y7J6QJ9M8X2P4';
+		const event = { ...serverEventBody(), eventId };
+		const responses = await Promise.all([
+			postServerEvent(created.value.secret, event),
+			postServerEvent(created.value.secret, { events: [event, event] }),
+			postServerEvent(created.value.secret, event),
+		]);
+
+		assert.deepEqual(
+			responses.map(({ status }) => status),
+			[202, 202, 202],
+		);
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 1);
+
+		const invalid = await postServerEvent(created.value.secret, {
+			events: [serverEventBody(), { ...serverEventBody(), name: '$identify' }],
+		});
+		assert.equal(invalid.status, 422);
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 1);
+	});
+
+	test('rolls back a Product batch and reports the failing event index', async ({ assert }) => {
+		const website = await createWebsite('product');
+		const createServerKey = await app.container.make(CreateServerKey);
+		const created = await createServerKey.execute(website);
+
+		if (!created.ok) {
+			throw new Error('The server key must be created');
+		}
+
+		const response = await postServerEvent(created.value.secret, {
+			events: [{ ...serverEventBody(), distinctId: 'product-a' }, serverEventBody()],
+		});
+
+		assert.equal(response.status, 422);
+		assert.deepEqual(await response.json(), { error: 'distinct_id_required', index: 1 });
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
+	test('charges authenticated batch rate limits by event count', async ({ assert }) => {
+		const website = await createWebsite();
+		const createServerKey = await app.container.make(CreateServerKey);
+		const created = await createServerKey.execute(website);
+
+		if (!created.ok) {
+			throw new Error('The server key must be created');
+		}
+
+		await serverEventsPerKey.set(
+			serverEventRateLimitKey(created.value.secret),
+			serverEventLimits.perKey - browserEventProtocol.maxBatchEvents,
+			'1 minute',
+		);
+		const batch = await postServerEvent(created.value.secret, {
+			events: Array.from({ length: browserEventProtocol.maxBatchEvents }, () => serverEventBody()),
+		});
+
+		assert.equal(batch.status, 202);
+		assert.equal((await postServerEvent(created.value.secret, serverEventBody())).status, 429);
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), browserEventProtocol.maxBatchEvents);
+	});
+
 	test('enforces the Website identity contract after authenticating server events', async ({ assert }) => {
 		const product = await createWebsite('product');
 		const anonymous = await createWebsite();

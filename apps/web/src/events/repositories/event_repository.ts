@@ -1,5 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { inject } from '@adonisjs/core';
+import { sql } from 'kysely';
 import { EventSource } from '#collection/event_source';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import type { EventProperties } from '#collection/browser_event_protocol';
@@ -10,7 +11,12 @@ interface EventIdentity {
 	distinctId: string | null;
 }
 
-export interface BrowserEvent extends EventIdentity {
+interface IdentifiedEvent {
+	eventId?: string;
+	batchPosition?: number;
+}
+
+export interface BrowserEvent extends EventIdentity, IdentifiedEvent {
 	name: string;
 	occurredAt: Date;
 	path: string;
@@ -21,23 +27,45 @@ export interface BrowserEvent extends EventIdentity {
 	properties: EventProperties | null;
 }
 
-export interface ServerEvent extends EventIdentity {
+export interface ServerEvent extends EventIdentity, IdentifiedEvent {
 	name: string;
 	occurredAt: Date;
 	path: string;
 	properties: EventProperties;
 }
 
-interface BrowserIdentification {
+interface BrowserIdentification extends IdentifiedEvent {
 	occurredAt: Date;
 	path: string;
 	anonymousId: string;
 	distinctId: string;
 }
 
+function receivedAt(batchPosition: number | undefined) {
+	return batchPosition === undefined
+		? undefined
+		: sql<Date>`transaction_timestamp() + (${batchPosition} * interval '1 microsecond')`;
+}
+
 @inject()
 export class EventRepository {
 	constructor(private readonly transactions: TransactionManager) {}
+
+	async lockEventIds(eventIds: (string | undefined)[]) {
+		const keys = eventIds
+			.filter((eventId) => eventId !== undefined)
+			.map((eventId) => {
+				const digest = createHash('sha256').update(`event-id:${eventId}`).digest();
+				return [digest.readInt32BE(0), digest.readInt32BE(4)] as const;
+			});
+		const uniqueKeys = [...new Map(keys.map((key) => [`${key[0]}:${key[1]}`, key])).values()].sort(
+			(first, second) => first[0] - second[0] || first[1] - second[1],
+		);
+
+		for (const [first, second] of uniqueKeys) {
+			await sql`select pg_advisory_xact_lock(${first}, ${second})`.execute(this.transactions.currentDatabase());
+		}
+	}
 
 	async appendBrowserEvent(websiteId: string, event: BrowserEvent) {
 		await this.transactions
@@ -46,6 +74,8 @@ export class EventRepository {
 			.values({
 				id: randomUUID(),
 				website_id: websiteId,
+				event_id: event.eventId,
+				received_at: receivedAt(event.batchPosition),
 				name: event.name,
 				source: EventSource.Browser,
 				occurred_at: event.occurredAt,
@@ -59,6 +89,7 @@ export class EventRepository {
 				session_id: event.sessionId,
 				distinct_id: event.distinctId,
 			})
+			.onConflict((conflict) => conflict.doNothing())
 			.execute();
 	}
 
@@ -69,6 +100,8 @@ export class EventRepository {
 			.values({
 				id: randomUUID(),
 				website_id: websiteId,
+				event_id: identification.eventId,
+				received_at: receivedAt(identification.batchPosition),
 				name: '$identify',
 				source: EventSource.Browser,
 				occurred_at: identification.occurredAt,
@@ -82,9 +115,7 @@ export class EventRepository {
 				utm_campaign: null,
 				properties: null,
 			})
-			.onConflict((conflict) =>
-				conflict.columns(['website_id', 'anonymous_id']).where('name', '=', '$identify').doNothing(),
-			)
+			.onConflict((conflict) => conflict.doNothing())
 			.execute();
 	}
 
@@ -95,6 +126,8 @@ export class EventRepository {
 			.values({
 				id: randomUUID(),
 				website_id: websiteId,
+				event_id: event.eventId,
+				received_at: receivedAt(event.batchPosition),
 				name: event.name,
 				source: EventSource.Server,
 				occurred_at: event.occurredAt,
@@ -108,6 +141,7 @@ export class EventRepository {
 				utm_medium: null,
 				utm_campaign: null,
 			})
+			.onConflict((conflict) => conflict.doNothing())
 			.execute();
 	}
 }

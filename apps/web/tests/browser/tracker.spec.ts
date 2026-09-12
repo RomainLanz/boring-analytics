@@ -197,6 +197,64 @@ test.group('Browser tracker', (group) => {
 		assert.equal(events[0]?.session_id, events[1]?.session_id);
 	});
 
+	test('accepts a stable optional event_id without changing the existing track signature', async ({
+		assert,
+		browserContext,
+	}) => {
+		const trackingId = await createWebsite();
+		const page = await browserContext.newPage();
+
+		await page.goto(trackedPageUrl(trackingId, '/pricing', 'no-referrer').href);
+		await waitForEvents(1);
+		const results = await page.evaluate(() => [
+			window.boringAnalytics?.track('signup'),
+			window.boringAnalytics?.track('checkout', { plan: 'pro' }, { eventId: 'checkout-stable-1' }),
+			window.boringAnalytics?.track('checkout', { plan: 'pro' }, { eventId: 'checkout-stable-1' }),
+			window.boringAnalytics?.track('invalid-options', {}, null as never),
+		]);
+		await waitForEvents(3);
+
+		assert.deepEqual(results, [true, true, true, false]);
+		const events = await db.selectFrom('events').select('name').orderBy('received_at').execute();
+		assert.deepEqual(
+			events.map(({ name }) => name),
+			['$pageview', 'signup', 'checkout'],
+		);
+	});
+
+	test('sends bounded custom-event batches through the framework-independent API', async ({
+		assert,
+		browserContext,
+	}) => {
+		const trackingId = await createWebsite();
+		const page = await browserContext.newPage();
+
+		await page.goto(trackedPageUrl(trackingId, '/pricing', 'no-referrer').href);
+		await waitForEvents(1);
+		const results = await page.evaluate(
+			(maxBatchEvents) => [
+				window.boringAnalytics?.trackBatch([
+					{ name: 'signup', properties: { plan: 'pro' }, eventId: 'signup-1' },
+					{ name: 'checkout', eventId: 'checkout-1' },
+				]),
+				window.boringAnalytics?.trackBatch([]),
+				window.boringAnalytics?.trackBatch(Array.from({ length: maxBatchEvents + 1 }, () => ({ name: 'too-many' }))),
+				window.boringAnalytics?.trackBatch([null] as never),
+				window.boringAnalytics?.trackBatch([undefined] as never),
+				window.boringAnalytics?.trackBatch(new Array(1) as never),
+			],
+			browserEventProtocol.maxBatchEvents,
+		);
+		await waitForEvents(3);
+
+		assert.deepEqual(results, [true, false, false, false, false, false]);
+		const events = await db.selectFrom('events').select('name').orderBy('received_at').execute();
+		assert.deepEqual(
+			events.map(({ name }) => name),
+			['$pageview', 'signup', 'checkout'],
+		);
+	});
+
 	test('sends Product identity from the script and updates it for future events only', async ({
 		assert,
 		browserContext,

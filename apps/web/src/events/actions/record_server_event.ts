@@ -6,7 +6,7 @@ import { err, ok, type Result } from '#core/result';
 import type { EventProperties } from '#collection/browser_event_protocol';
 import type { WebsiteIdentityMode } from '#websites/website_identity_mode';
 
-interface RecordServerEventParams {
+export interface RecordServerEventParams {
 	websiteId: string;
 	name: string;
 	occurredAt: Date;
@@ -14,9 +14,11 @@ interface RecordServerEventParams {
 	properties: EventProperties;
 	identityMode: WebsiteIdentityMode;
 	distinctId?: string;
+	eventId?: string;
+	batchPosition?: number;
 }
 
-type RecordServerEventError = { type: 'invalid_occurred_at' } | EventIdentityError;
+export type RecordServerEventError = { type: 'invalid_occurred_at' } | EventIdentityError;
 
 @inject()
 export class RecordServerEvent {

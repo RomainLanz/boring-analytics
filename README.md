@@ -206,6 +206,9 @@ window.boringAnalytics?.track('signup', {
 	seats: 3,
 	coupon: null,
 });
+
+// Supply a stable ID only when the caller may retry this event.
+window.boringAnalytics?.track('invoice_paid', { amount: 49 }, { eventId: 'invoice-018f6b9a' });
 ```
 
 Custom event names cannot start with `$`, which is reserved for built-in events. A name must contain 1 to 64
@@ -216,6 +219,27 @@ only be strings, finite numbers, booleans, or `null`; strings may contain at mos
 or unpaired UTF-16 surrogates. Nested objects and arrays are rejected. The complete JSON request must remain within the
 4 KiB collection limit. `track` returns `false` and sends nothing when its input violates these rules, exceeds the
 payload limit, or Do Not Track is enabled.
+
+`eventId` is optional. It must be an opaque token containing 1 to 255 characters, with no whitespace, control
+characters, or malformed UTF-16. When supplied, only the first event with that `eventId` is inserted for a Website,
+even across browser and server requests or concurrent deliveries. The same value remains independent on another
+Website. An event without `eventId` remains append-only and every accepted delivery is inserted. The tracker does not
+generate IDs, retry requests, or persist an offline queue; an integrator that retries must retain and resubmit its own
+stable ID.
+
+Send up to 20 custom browser events in one atomic request with `trackBatch`:
+
+```js
+window.boringAnalytics?.trackBatch([
+	{ name: 'signup', properties: { plan: 'pro' }, eventId: 'signup-018f6b9a' },
+	{ name: 'checkout_started', eventId: 'checkout-018f6b9a' },
+]);
+```
+
+The equivalent public HTTP form is `{ "trackingId": "...", "events": [...] }`; each item has the same fields and
+rules as one browser event except that `trackingId` is factored to the envelope. A batch contains 1 to 20 events and
+its complete JSON body is limited to 64 KiB. `trackBatch` returns `false` and sends nothing when any item or either
+bound is invalid.
 
 Custom events use the same Origin checks, rate limits, timestamp tolerance, and Website identity contract as
 pageviews. The collector derives identity from the request IP and User-Agent, then persists only the HMAC identifiers.
@@ -271,8 +295,8 @@ window.boringAnalytics?.track('checkout_started', { plan: 'pro' });
 ```
 
 `setDistinctId` returns `false` and keeps the previous value when validation fails. It changes only future events and
-does not create an identification link. Arbitrary aliases, profiles, traits, transitive identity merging, batching, and
-general deduplication remain out of scope.
+does not create an identification link. Arbitrary aliases, profiles, traits, transitive identity merging, automatic
+retry, and general deduplication without an explicit `eventId` remain out of scope.
 
 ### Server events
 
@@ -297,12 +321,37 @@ curl -X POST "$BORING_ANALYTICS_URL/api/server/events" \
 JSON
 ```
 
+To send a batch, keep the same authenticated endpoint and wrap 1 to 20 event objects in `events`:
+
+```json
+{
+	"events": [
+		{
+			"name": "invoice.paid",
+			"occurredAt": "2026-09-12T12:00:00Z",
+			"path": "/billing",
+			"properties": { "amount": 49 },
+			"eventId": "invoice-018f6b9a"
+		}
+	]
+}
+```
+
 The endpoint returns `202 Accepted` and records the event with a server source. It does not require an `Origin` header
 and does not create anonymous or session identity. Omit `distinctId` for an Anonymous Website; it is required for a
 Product Website. The server API does not accept `$identify`, because a server request has no current anonymous browser
 identity to associate. Names, paths, properties, timestamps, the 4 KiB payload limit, and
 JSON media type follow the browser custom-event contract above. Missing, malformed, incorrect, and revoked keys all
 return `401` with `{ "error": "invalid_server_key" }`.
+
+Browser and server batches are fully atomic. Every item is validated with the single-event rules before commit and
+items are applied in array order. This makes a browser `$identify` preceding Product events deterministic. If an
+application rule fails, the response is `422` with its zero-based `index` and no event from the batch is committed.
+Duplicate `eventId` values, whether repeated inside the batch, already persisted, or inserted concurrently, are
+successful no-ops; the response remains `202` and does not disclose which IDs existed. Public requests use the same
+`collection_forbidden` response for an unknown tracking ID and a disallowed Origin. Both single and batch requests
+consume rate-limit capacity by event count, including duplicate no-ops. The batch JSON limit is 64 KiB; the 4 KiB
+limit remains unchanged for single events.
 
 ## Adding a capability
 

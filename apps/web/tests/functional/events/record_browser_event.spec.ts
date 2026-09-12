@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import app from '@adonisjs/core/services/app';
 import limiter from '@adonisjs/limiter/services/main';
 import { test } from '@japa/runner';
+import { sql } from 'kysely';
+import { CreateServerKey } from '#collection/actions/create_server_key';
 import { browserEventProtocol } from '#collection/browser_event_protocol';
 import { EventSource } from '#collection/event_source';
 import { db } from '#shared/services/db';
@@ -31,7 +34,7 @@ async function createWebsite(allowedDomain = 'example.com', identityMode: 'anony
 		})
 		.execute();
 
-	return { websiteId, trackingId };
+	return { ownerUserId: userId, websiteId, trackingId };
 }
 
 async function postEvent(
@@ -127,6 +130,37 @@ async function postRaw(body: string, contentType: string, ip = '203.0.113.42') {
 	});
 }
 
+async function postBatch(
+	trackingId: string,
+	events: Record<string, unknown>[],
+	origin = 'https://example.com',
+	ip = '203.0.113.42',
+) {
+	return fetch(endpoint, {
+		method: 'POST',
+		headers: {
+			'accept': 'application/json',
+			'content-type': 'application/json',
+			origin,
+			'x-forwarded-for': ip,
+			'user-agent': 'Batch Browser',
+		},
+		body: JSON.stringify({ trackingId, events }),
+	});
+}
+
+async function postServerBatch(secret: string, events: Record<string, unknown>[]) {
+	return fetch('http://localhost:3333/api/server/events', {
+		method: 'POST',
+		headers: {
+			'accept': 'application/json',
+			'authorization': `Bearer ${secret}`,
+			'content-type': 'application/json',
+		},
+		body: JSON.stringify({ events }),
+	});
+}
+
 test.group('POST /api/events', (group) => {
 	group.each.setup(async () => {
 		await limiter.clear();
@@ -204,6 +238,226 @@ test.group('POST /api/events', (group) => {
 		assert.match(event.session_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
 		assert.notProperty(event, 'ip');
 		assert.notProperty(event, 'user_agent');
+	});
+
+	test('deduplicates an event_id per Website across single, batch, and concurrent ingestion', async ({ assert }) => {
+		const first = await createWebsite();
+		const second = await createWebsite();
+		const eventId = 'checkout_01J8ZV7Y7J6QJ9M8X2P4';
+
+		const responses = await Promise.all([
+			postCustomEvent(first.trackingId, { eventId }),
+			postCustomEvent(first.trackingId, { eventId }),
+			postBatch(first.trackingId, [
+				{
+					name: 'signup',
+					occurredAt: new Date().toISOString(),
+					path: '/pricing',
+					properties: {},
+					eventId,
+				},
+			]),
+			postCustomEvent(second.trackingId, { eventId }),
+		]);
+
+		assert.deepEqual(
+			responses.map(({ status }) => status),
+			[202, 202, 202, 202],
+		);
+		const events = await db.selectFrom('events').select(['website_id', 'name']).orderBy('website_id').execute();
+		assert.lengthOf(events, 2);
+		assert.sameMembers(
+			events.map(({ website_id }) => website_id),
+			[first.websiteId, second.websiteId],
+		);
+	});
+
+	test('avoids deadlocks for concurrent browser and server batches with reversed event IDs', async ({ assert }) => {
+		const website = await createWebsite();
+		const createServerKey = await app.container.make(CreateServerKey);
+		const key = await createServerKey.execute(website);
+
+		if (!key.ok) {
+			throw new Error('The server key must be created');
+		}
+
+		const occurredAt = new Date().toISOString();
+		const browserEvent = (eventId: string) => ({
+			name: `browser-${eventId}`,
+			occurredAt,
+			path: '/',
+			properties: {},
+			eventId,
+		});
+		const serverEvent = (eventId: string) => ({
+			name: `server-${eventId}`,
+			occurredAt,
+			path: '/',
+			properties: {},
+			eventId,
+		});
+		const [browserResponse, serverResponse] = await Promise.all([
+			postBatch(website.trackingId, [browserEvent('shared-a'), browserEvent('shared-b'), browserEvent('browser-only')]),
+			postServerBatch(key.value.secret, [serverEvent('shared-b'), serverEvent('shared-a'), serverEvent('server-only')]),
+		]);
+
+		assert.equal(browserResponse.status, 202);
+		assert.equal(serverResponse.status, 202);
+		const events = await db.selectFrom('events').select('event_id').execute();
+		assert.sameMembers(
+			events.map(({ event_id }) => event_id),
+			['shared-a', 'shared-b', 'browser-only', 'server-only'],
+		);
+	});
+
+	test('validates event_id as an opaque non-whitespace token of at most 255 characters', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+
+		for (const eventId of [
+			'',
+			'contains space',
+			'line\nbreak',
+			'x'.repeat(browserEventProtocol.maxEventIdLength + 1),
+		]) {
+			assert.equal((await postCustomEvent(trackingId, { eventId })).status, 422, JSON.stringify(eventId));
+		}
+
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
+	test('rejects a mixed invalid batch atomically and preserves identify order', async ({ assert }) => {
+		const { trackingId } = await createWebsite('example.com', 'product');
+		const occurredAt = new Date().toISOString();
+		const invalid = await postBatch(trackingId, [
+			{ name: '$identify', occurredAt, path: '/', distinctId: 'product-a' },
+			{ name: '$reserved', occurredAt, path: '/', properties: {} },
+		]);
+
+		assert.equal(invalid.status, 422);
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+
+		const accepted = await postBatch(trackingId, [
+			{ name: '$identify', occurredAt, path: '/', distinctId: 'product-a', eventId: 'identify-a' },
+			{
+				name: 'signup',
+				occurredAt,
+				path: '/',
+				properties: {},
+				distinctId: 'product-a',
+				eventId: 'signup-a',
+			},
+		]);
+
+		assert.equal(accepted.status, 202);
+		const events = await db
+			.selectFrom('events')
+			.select(['name', 'distinct_id', sql<string>`received_at::text`.as('received_at_text')])
+			.orderBy('received_at')
+			.orderBy('id')
+			.execute();
+		assert.deepEqual(
+			events.map(({ name, distinct_id }) => ({ name, distinct_id })),
+			[
+				{ name: '$identify', distinct_id: 'product-a' },
+				{ name: 'signup', distinct_id: 'product-a' },
+			],
+		);
+		assert.notEqual(events[0]?.received_at_text, events[1]?.received_at_text);
+	});
+
+	test('rolls back earlier batch events when a later identity rule fails', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const occurredAt = new Date().toISOString();
+		const response = await postBatch(trackingId, [
+			{ name: 'first', occurredAt, path: '/', properties: {} },
+			{ name: 'second', occurredAt, path: '/', properties: {}, distinctId: 'not-allowed' },
+		]);
+
+		assert.equal(response.status, 422);
+		assert.deepEqual(await response.json(), { error: 'distinct_id_not_allowed', index: 1 });
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
+	test('charges public batch rate limits by event count', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const events = Array.from({ length: browserEventProtocol.maxBatchEvents }, (_, index) => ({
+			name: `event-${index}`,
+			occurredAt: new Date().toISOString(),
+			path: '/',
+			properties: {},
+		}));
+
+		for (let batch = 0; batch < collectionLimits.perWebsiteAndSource / events.length; batch++) {
+			assert.equal((await postBatch(trackingId, events)).status, 202);
+		}
+
+		assert.equal((await postCustomEvent(trackingId, {})).status, 429);
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), collectionLimits.perWebsiteAndSource);
+	});
+
+	test('charges the public source quota across rotating Websites', async ({ assert }) => {
+		const websites = await Promise.all(Array.from({ length: 5 }, () => createWebsite()));
+		const events = Array.from({ length: browserEventProtocol.maxBatchEvents }, (_, index) => ({
+			name: `event-${index}`,
+			occurredAt: new Date().toISOString(),
+			path: '/',
+			properties: {},
+		}));
+
+		for (const website of websites) {
+			for (let batch = 0; batch < 5; batch++) {
+				assert.equal((await postBatch(website.trackingId, events)).status, 202);
+			}
+		}
+
+		assert.equal((await postEvent(randomUUID(), {})).status, 429);
+	});
+
+	test('bounds public batches by event count and total JSON size', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const event = {
+			name: 'large',
+			occurredAt: new Date().toISOString(),
+			path: '/',
+			properties: Object.fromEntries(
+				Array.from({ length: browserEventProtocol.maxProperties }, (_, index) => [
+					`key-${index}`,
+					'x'.repeat(browserEventProtocol.maxPropertyStringLength),
+				]),
+			),
+		};
+
+		assert.equal(
+			(
+				await postBatch(
+					trackingId,
+					Array.from({ length: browserEventProtocol.maxBatchEvents + 1 }, () => ({
+						name: 'too-many',
+						occurredAt: new Date().toISOString(),
+						path: '/',
+						properties: {},
+					})),
+				)
+			).status,
+			422,
+		);
+		const oversized = JSON.stringify({
+			trackingId,
+			events: Array.from({ length: browserEventProtocol.maxBatchEvents }, () => event),
+		});
+		assert.isAbove(Buffer.byteLength(oversized), browserEventProtocol.maxBatchPayloadBytes);
+		assert.equal((await postRaw(oversized, 'application/json', '203.0.113.99')).status, 413);
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
+	test('returns the same public error for an unknown Website and a forbidden Origin', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const forbidden = await postEvent(trackingId, {}, 'https://attacker.example');
+		const unknown = await postEvent(randomUUID(), {}, 'https://example.com');
+
+		assert.equal(forbidden.status, 403);
+		assert.equal(unknown.status, 403);
+		assert.deepEqual(await forbidden.json(), await unknown.json());
 	});
 
 	test('persists a supplied opaque distinct_id for Product browser events', async ({ assert }) => {

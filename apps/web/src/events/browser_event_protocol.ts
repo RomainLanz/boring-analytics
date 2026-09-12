@@ -3,11 +3,14 @@ export type EventProperties = Record<string, EventPropertyValue>;
 
 export const browserEventProtocol = {
 	maxPayloadBytes: 4 * 1024,
+	maxBatchPayloadBytes: 64 * 1024,
+	maxBatchEvents: 20,
 	maxPathLength: 2048,
 	maxReferrerLength: 2048,
 	maxUtmLength: 255,
 	maxNameLength: 64,
 	maxDistinctIdLength: 255,
+	maxEventIdLength: 255,
 	maxProperties: 20,
 	maxPropertyKeyLength: 64,
 	maxPropertyStringLength: 255,
@@ -75,6 +78,16 @@ export function isValidDistinctId(value: unknown): value is string {
 		typeof value === 'string' &&
 		value.length >= 1 &&
 		value.length <= browserEventProtocol.maxDistinctIdLength &&
+		isValidEventPropertyString(value)
+	);
+}
+
+export function isValidEventId(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		value.length >= 1 &&
+		value.length <= browserEventProtocol.maxEventIdLength &&
+		!/[\p{Cc}\p{Cs}\s]/u.test(value) &&
 		isValidEventPropertyString(value)
 	);
 }

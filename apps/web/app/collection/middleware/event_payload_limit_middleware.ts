@@ -4,7 +4,11 @@ import type { NextFn } from '@adonisjs/core/types/http';
 
 export default class EventPayloadLimitMiddleware {
 	handle({ request, response }: HttpContext, next: NextFn) {
-		if (Buffer.byteLength(request.raw() ?? '', 'utf8') > browserEventProtocol.maxPayloadBytes) {
+		const body: unknown = request.body();
+		const isBatch = typeof body === 'object' && body !== null && 'events' in body && Array.isArray(body.events);
+		const maxPayloadBytes = isBatch ? browserEventProtocol.maxBatchPayloadBytes : browserEventProtocol.maxPayloadBytes;
+
+		if (Buffer.byteLength(request.raw() ?? '', 'utf8') > maxPayloadBytes) {
 			return response.status(413).send(null);
 		}
 

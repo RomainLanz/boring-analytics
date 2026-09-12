@@ -15,6 +15,8 @@ interface BrowserEventContext {
 	ip: string;
 	userAgent: string;
 	distinctId?: string;
+	eventId?: string;
+	batchPosition?: number;
 }
 
 export type RecordBrowserEventParams = BrowserEventContext &
@@ -30,7 +32,7 @@ export type RecordBrowserEventParams = BrowserEventContext &
 		| { type: 'identify'; distinctId: string }
 	);
 
-type RecordBrowserEventError =
+export type RecordBrowserEventError =
 	| { type: 'collection_forbidden' }
 	| { type: 'invalid_occurred_at' }
 	| { type: 'invalid_referrer' }
@@ -95,6 +97,8 @@ export class RecordBrowserEvent {
 				receivedAt,
 			});
 			await this.events.appendBrowserIdentification(target.id, {
+				eventId: params.eventId,
+				batchPosition: params.batchPosition,
 				occurredAt: params.occurredAt,
 				path: params.path,
 				anonymousId: currentIdentity.anonymousId,
@@ -114,6 +118,8 @@ export class RecordBrowserEvent {
 				: null;
 
 		await this.events.appendBrowserEvent(target.id, {
+			eventId: params.eventId,
+			batchPosition: params.batchPosition,
 			name: params.type === 'pageview' ? '$pageview' : params.name,
 			occurredAt: params.occurredAt,
 			path: params.path,
