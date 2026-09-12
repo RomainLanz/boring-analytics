@@ -196,6 +196,68 @@ test.group('Funnel report query', (group) => {
 		});
 	});
 
+	test('resolves only pre-identification anonymous events in Product Funnels without double counting', async ({
+		assert,
+	}) => {
+		const { ownerUserId, websiteId } = await createWebsite('product');
+		const { websiteId: otherWebsiteId } = await createWebsite('product');
+		const funnelId = randomUUID();
+		await db
+			.insertInto('funnels')
+			.values({
+				id: funnelId,
+				website_id: websiteId,
+				name: 'Acquisition to signup',
+				identity_kind: 'distinct_id',
+				conversion_window_seconds: 7 * 24 * 60 * 60,
+			})
+			.execute();
+		await db
+			.insertInto('funnel_steps')
+			.values([
+				{ funnel_id: funnelId, position: 1, event_name: '$pageview', filter: null },
+				{ funnel_id: funnelId, position: 2, event_name: 'signup', filter: null },
+			])
+			.execute();
+		await db
+			.insertInto('events')
+			.values([
+				anonymousEvent(websiteId, 'anonymous-a', '$pageview', '2026-03-10T10:00:00.000Z'),
+				identificationEvent(websiteId, 'anonymous-a', 'product-a', '2026-03-10T11:00:00.000Z'),
+				anonymousEvent(websiteId, 'anonymous-a-2', '$pageview', '2026-03-10T12:00:00.000Z'),
+				identificationEvent(websiteId, 'anonymous-a-2', 'product-a', '2026-03-10T13:00:00.000Z'),
+				productEvent(websiteId, 'product-a', 'signup', '2026-03-11T10:00:00.000Z'),
+				identificationEvent(websiteId, 'anonymous-after', 'product-after', '2026-03-12T10:00:00.000Z'),
+				anonymousEvent(websiteId, 'anonymous-after', '$pageview', '2026-03-12T10:00:00.001Z'),
+				productEvent(websiteId, 'product-after', 'signup', '2026-03-13T10:00:00.000Z'),
+				{
+					...anonymousEvent(websiteId, 'anonymous-late', '$pageview', '2026-03-14T10:00:00.000Z'),
+					received_at: new Date('2026-03-16T10:00:00.000Z'),
+				},
+				identificationEvent(websiteId, 'anonymous-late', 'product-late', '2026-03-15T10:00:00.000Z'),
+				productEvent(websiteId, 'product-late', 'signup', '2026-03-16T11:00:00.000Z'),
+				anonymousEvent(websiteId, 'cross-website', '$pageview', '2026-03-17T10:00:00.000Z'),
+				identificationEvent(otherWebsiteId, 'cross-website', 'product-cross', '2026-03-17T11:00:00.000Z'),
+				productEvent(websiteId, 'product-cross', 'signup', '2026-03-18T10:00:00.000Z'),
+			])
+			.execute();
+		await db.updateTable('websites').set({ identity_mode: 'anonymous' }).where('id', '=', websiteId).execute();
+
+		const query = await app.container.make(FunnelReportQuery);
+		const report = await query.execute(funnelId, websiteId, ownerUserId, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.deepEqual(
+			report?.steps.map(({ entrants }) => entrants),
+			[2, 2],
+		);
+		assert.deepEqual(report?.summary, {
+			entrants: 2,
+			converted: 2,
+			conversionRate: 1,
+			totalDropoffs: 0,
+		});
+	});
+
 	test('reports the latest mature Product cohorts at the 30-day window limit', async ({ assert }) => {
 		const { ownerUserId, websiteId } = await createWebsite('product');
 		const funnelId = randomUUID();
@@ -291,6 +353,21 @@ function productEvent(websiteId: string, distinctId: string, name: string, occur
 	return {
 		...event(websiteId, 'unused-session', name, occurredAt),
 		anonymous_id: null,
+		session_id: null,
+		distinct_id: distinctId,
+	};
+}
+
+function anonymousEvent(websiteId: string, anonymousId: string, name: string, occurredAt: string) {
+	return {
+		...event(websiteId, 'anonymous-session', name, occurredAt),
+		anonymous_id: anonymousId,
+	};
+}
+
+function identificationEvent(websiteId: string, anonymousId: string, distinctId: string, occurredAt: string) {
+	return {
+		...anonymousEvent(websiteId, anonymousId, '$identify', occurredAt),
 		session_id: null,
 		distinct_id: distinctId,
 	};

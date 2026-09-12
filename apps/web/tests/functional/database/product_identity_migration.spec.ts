@@ -89,6 +89,52 @@ test.group('Product identity migration', (group) => {
 		}
 		await assert.rejects(() =>
 			db
+				.insertInto('events')
+				.values({
+					id: randomUUID(),
+					website_id: websiteId,
+					name: '$identify',
+					source: 1,
+					occurred_at: new Date(),
+					path: '/',
+					distinct_id: 'product-without-anonymous',
+				})
+				.execute(),
+		);
+		await db
+			.insertInto('events')
+			.values({
+				id: randomUUID(),
+				website_id: websiteId,
+				name: '$identify',
+				source: 1,
+				occurred_at: new Date(),
+				path: '/',
+				anonymous_id: 'anonymous-a',
+				session_id: null,
+				distinct_id: 'product-a',
+				properties: null,
+			})
+			.execute();
+		await assert.rejects(() =>
+			db
+				.insertInto('events')
+				.values({
+					id: randomUUID(),
+					website_id: websiteId,
+					name: '$identify',
+					source: 1,
+					occurred_at: new Date(),
+					path: '/',
+					anonymous_id: 'anonymous-a',
+					session_id: null,
+					distinct_id: 'product-b',
+					properties: null,
+				})
+				.execute(),
+		);
+		await assert.rejects(() =>
+			db
 				.insertInto('funnels')
 				.values({
 					id: randomUUID(),
@@ -115,15 +161,29 @@ test.group('Product identity migration', (group) => {
 		const indexes = await sql<{ indexname: string }>`
 			select indexname from pg_indexes
 			where schemaname = current_schema()
-				and indexname = 'events_website_name_distinct_id_occurred_at_index'
+				and indexname in (
+					'events_website_name_distinct_id_occurred_at_index',
+					'events_website_anonymous_identification_unique',
+					'events_website_distinct_identification_index',
+					'events_website_name_anonymous_id_occurred_at_index'
+				)
 		`.execute(db);
-		assert.lengthOf(indexes.rows, 1);
+		assert.sameMembers(
+			indexes.rows.map(({ indexname }) => indexname),
+			[
+				'events_website_name_distinct_id_occurred_at_index',
+				'events_website_anonymous_identification_unique',
+				'events_website_distinct_identification_index',
+				'events_website_name_anonymous_id_occurred_at_index',
+			],
+		);
 
 		const constraints = await sql<{ name: string }>`
 			select conname as name from pg_constraint
 			where conname in (
 				'websites_identity_mode_check',
 				'events_distinct_id_check',
+				'events_identification_identity_check',
 				'funnels_identity_kind_check',
 				'funnels_conversion_window_check'
 			)
@@ -133,6 +193,7 @@ test.group('Product identity migration', (group) => {
 			[
 				'websites_identity_mode_check',
 				'events_distinct_id_check',
+				'events_identification_identity_check',
 				'funnels_identity_kind_check',
 				'funnels_conversion_window_check',
 			],

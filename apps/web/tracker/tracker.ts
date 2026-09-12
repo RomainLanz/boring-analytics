@@ -14,6 +14,7 @@ declare global {
 		boringAnalytics?: {
 			track(name: string, properties?: EventProperties): boolean;
 			setDistinctId(distinctId: string): boolean;
+			identify(distinctId: string): boolean;
 		};
 	}
 }
@@ -155,6 +156,28 @@ if (script && trackingId) {
 		return true;
 	}
 
+	function identify(value: string) {
+		const path = currentPath();
+
+		if (doNotTrack || path === null || !isValidDistinctId(value)) {
+			return false;
+		}
+
+		const sent = send({
+			trackingId,
+			distinctId: value,
+			name: '$identify',
+			occurredAt: new Date().toISOString(),
+			path,
+		});
+
+		if (sent) {
+			distinctId = value;
+		}
+
+		return sent;
+	}
+
 	for (const method of ['pushState', 'replaceState'] as const) {
 		const original = history[method];
 		history[method] = function (...args) {
@@ -170,6 +193,6 @@ if (script && trackingId) {
 			collectPageview();
 		}
 	});
-	window.boringAnalytics = { track: collectCustomEvent, setDistinctId };
+	window.boringAnalytics = { track: collectCustomEvent, setDistinctId, identify };
 	collectPageview();
 }

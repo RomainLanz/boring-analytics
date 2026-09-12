@@ -89,6 +89,31 @@ async function postCustomEvent(
 	});
 }
 
+async function postIdentify(
+	trackingId: string,
+	distinctId: string,
+	origin = 'https://example.com',
+	ip = '203.0.113.42',
+) {
+	return fetch(endpoint, {
+		method: 'POST',
+		headers: {
+			'accept': 'application/json',
+			'content-type': 'application/json',
+			origin,
+			'x-forwarded-for': ip,
+			'user-agent': 'Custom Event Browser',
+		},
+		body: JSON.stringify({
+			trackingId,
+			name: '$identify',
+			occurredAt: new Date().toISOString(),
+			path: '/pricing',
+			distinctId,
+		}),
+	});
+}
+
 async function postRaw(body: string, contentType: string, ip = '203.0.113.42') {
 	return fetch(endpoint, {
 		method: 'POST',
@@ -181,7 +206,7 @@ test.group('POST /api/events', (group) => {
 		assert.notProperty(event, 'user_agent');
 	});
 
-	test('requires and persists an opaque distinct_id for Product browser events', async ({ assert }) => {
+	test('persists a supplied opaque distinct_id for Product browser events', async ({ assert }) => {
 		const { websiteId, trackingId } = await createWebsite('example.com', 'product');
 		const distinctId = 'usr_01J8ZV7Y7J6QJ9M8X2P4';
 
@@ -200,17 +225,60 @@ test.group('POST /api/events', (group) => {
 		});
 	});
 
-	test('rejects missing Product identity and identity sent to an Anonymous Website', async ({ assert }) => {
-		const product = await createWebsite('example.com', 'product');
+	test('captures anonymous browser events before a Product Website identifies', async ({ assert }) => {
+		const { websiteId, trackingId } = await createWebsite('example.com', 'product');
+
+		const response = await postCustomEvent(trackingId, {});
+
+		assert.equal(response.status, 202);
+		const event = await db
+			.selectFrom('events')
+			.select(['website_id', 'distinct_id', 'anonymous_id', 'session_id'])
+			.executeTakeFirstOrThrow();
+		assert.equal(event.website_id, websiteId);
+		assert.isNull(event.distinct_id);
+		assert.match(event.anonymous_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
+		assert.match(event.session_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
+	});
+
+	test('persists the first Product identification once for the current anonymous identity', async ({ assert }) => {
+		const { websiteId, trackingId } = await createWebsite('example.com', 'product');
+		assert.equal((await postCustomEvent(trackingId, {})).status, 202);
+
+		const identified = await postIdentify(trackingId, 'product-a');
+		const repeated = await postIdentify(trackingId, 'product-a');
+		const conflicting = await postIdentify(trackingId, 'product-b');
+
+		assert.equal(identified.status, 202);
+		assert.equal(repeated.status, 202);
+		assert.equal(conflicting.status, 202);
+		const events = await db
+			.selectFrom('events')
+			.select(['website_id', 'name', 'source', 'anonymous_id', 'session_id', 'distinct_id', 'properties'])
+			.orderBy('received_at')
+			.execute();
+		assert.lengthOf(events, 2);
+		assert.equal(events[0]?.anonymous_id, events[1]?.anonymous_id);
+		assert.deepInclude(events[1], {
+			website_id: websiteId,
+			name: '$identify',
+			source: EventSource.Browser,
+			session_id: null,
+			distinct_id: 'product-a',
+			properties: null,
+		});
+	});
+
+	test('rejects Product identity sent to an Anonymous Website', async ({ assert }) => {
 		const anonymous = await createWebsite();
 
-		const missing = await postCustomEvent(product.trackingId, {});
 		const unexpected = await postCustomEvent(anonymous.trackingId, { distinctId: 'usr_opaque' });
+		const identification = await postIdentify(anonymous.trackingId, 'usr_opaque');
 
-		assert.equal(missing.status, 422);
-		assert.deepEqual(await missing.json(), { error: 'distinct_id_required' });
 		assert.equal(unexpected.status, 422);
 		assert.deepEqual(await unexpected.json(), { error: 'distinct_id_not_allowed' });
+		assert.equal(identification.status, 422);
+		assert.deepEqual(await identification.json(), { error: 'distinct_id_not_allowed' });
 		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
 	});
 

@@ -28,6 +28,13 @@ export interface ServerEvent extends EventIdentity {
 	properties: EventProperties;
 }
 
+interface BrowserIdentification {
+	occurredAt: Date;
+	path: string;
+	anonymousId: string;
+	distinctId: string;
+}
+
 @inject()
 export class EventRepository {
 	constructor(private readonly transactions: TransactionManager) {}
@@ -52,6 +59,32 @@ export class EventRepository {
 				session_id: event.sessionId,
 				distinct_id: event.distinctId,
 			})
+			.execute();
+	}
+
+	async appendBrowserIdentification(websiteId: string, identification: BrowserIdentification) {
+		await this.transactions
+			.currentDatabase()
+			.insertInto('events')
+			.values({
+				id: randomUUID(),
+				website_id: websiteId,
+				name: '$identify',
+				source: EventSource.Browser,
+				occurred_at: identification.occurredAt,
+				path: identification.path,
+				anonymous_id: identification.anonymousId,
+				session_id: null,
+				distinct_id: identification.distinctId,
+				referrer: null,
+				utm_source: null,
+				utm_medium: null,
+				utm_campaign: null,
+				properties: null,
+			})
+			.onConflict((conflict) =>
+				conflict.columns(['website_id', 'anonymous_id']).where('name', '=', '$identify').doNothing(),
+			)
 			.execute();
 	}
 

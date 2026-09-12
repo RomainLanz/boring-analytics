@@ -7,6 +7,21 @@ export type EventIdentityError =
 	| { type: 'distinct_id_required' }
 	| { type: 'distinct_id_not_allowed' };
 
+export function validateBrowserEventIdentity(
+	identityMode: WebsiteIdentityMode,
+	distinctId: unknown,
+): Result<string | null, EventIdentityError> {
+	if (distinctId !== undefined && !isValidDistinctId(distinctId)) {
+		return err({ type: 'invalid_distinct_id' });
+	}
+
+	if (identityMode === 'anonymous' && distinctId !== undefined) {
+		return err({ type: 'distinct_id_not_allowed' });
+	}
+
+	return ok(distinctId ?? null);
+}
+
 export function validateEventIdentity(
 	identityMode: WebsiteIdentityMode,
 	distinctId: unknown,

@@ -43,8 +43,28 @@ const customEventFields = {
 		vine.unionOfTypes([vine.string(), vine.boolean({ strict: true }), vine.number({ strict: true }), vine.null()]),
 	),
 };
+const identifyFields = {
+	...commonFields,
+	name: vine.literal('$identify'),
+	distinctId: vine.string().minLength(1).maxLength(browserEventProtocol.maxDistinctIdLength),
+};
 const pageviewExpectedFields = Object.keys(pageviewFields).filter((field) => field !== 'distinctId');
 const customEventExpectedFields = Object.keys(customEventFields).filter((field) => field !== 'distinctId');
+const identifyExpectedFields = Object.keys(identifyFields);
+type BrowserEventKind = 'pageview' | 'identify' | 'custom';
+const expectedFieldsByKind: Record<BrowserEventKind, string[]> = {
+	pageview: pageviewExpectedFields,
+	identify: identifyExpectedFields,
+	custom: customEventExpectedFields,
+};
+
+function browserEventKind(name: unknown): BrowserEventKind {
+	if (name === '$pageview') {
+		return 'pageview';
+	}
+
+	return name === '$identify' ? 'identify' : 'custom';
+}
 
 function hasExactFields(body: Record<string, unknown>, expectedFields: string[]) {
 	const fields = Object.keys(body);
@@ -54,11 +74,11 @@ function hasExactFields(body: Record<string, unknown>, expectedFields: string[])
 	);
 }
 
-function isValidPayload(record: Record<string, unknown>, pageview: boolean, expectedFields: string[]) {
+function isValidPayload(record: Record<string, unknown>, custom: boolean, expectedFields: string[]) {
 	return (
 		hasExactFields(record, expectedFields) &&
 		(record.distinctId === undefined || isValidDistinctId(record.distinctId)) &&
-		(pageview || isValidEventProperties(record.properties))
+		(!custom || isValidEventProperties(record.properties))
 	);
 }
 
@@ -66,6 +86,7 @@ function isValidPayload(record: Record<string, unknown>, pageview: boolean, expe
 export default class RecordBrowserEventController {
 	static readonly pageviewValidator = vine.create(pageviewFields);
 	static readonly customEventValidator = vine.create(customEventFields);
+	static readonly identifyValidator = vine.create(identifyFields);
 
 	constructor(private readonly recordBrowserEvent: RecordBrowserEvent) {}
 
@@ -79,26 +100,29 @@ export default class RecordBrowserEventController {
 		}
 
 		const record = body as Record<string, unknown>;
-		const pageview = record.name === '$pageview';
-		const expectedFields = pageview ? pageviewExpectedFields : customEventExpectedFields;
+		const eventKind = browserEventKind(record.name);
+		const expectedFields = expectedFieldsByKind[eventKind];
 
-		if (!isValidPayload(record, pageview, expectedFields)) {
+		if (!isValidPayload(record, eventKind === 'custom', expectedFields)) {
 			return response.unprocessableEntity({
 				errors: [{ message: `The event payload must contain only ${expectedFields.join(', ')}` }],
 			});
 		}
 
-		const event = pageview
-			? await request.validateUsing(RecordBrowserEventController.pageviewValidator, {
-					data: {
-						...record,
-						referrer: record.referrer === '' ? null : record.referrer,
-						utmSource: record.utmSource === '' ? null : record.utmSource,
-						utmMedium: record.utmMedium === '' ? null : record.utmMedium,
-						utmCampaign: record.utmCampaign === '' ? null : record.utmCampaign,
-					},
-				})
-			: await request.validateUsing(RecordBrowserEventController.customEventValidator, { data: body });
+		const event =
+			eventKind === 'pageview'
+				? await request.validateUsing(RecordBrowserEventController.pageviewValidator, {
+						data: {
+							...record,
+							referrer: record.referrer === '' ? null : record.referrer,
+							utmSource: record.utmSource === '' ? null : record.utmSource,
+							utmMedium: record.utmMedium === '' ? null : record.utmMedium,
+							utmCampaign: record.utmCampaign === '' ? null : record.utmCampaign,
+						},
+					})
+				: eventKind === 'identify'
+					? await request.validateUsing(RecordBrowserEventController.identifyValidator, { data: body })
+					: await request.validateUsing(RecordBrowserEventController.customEventValidator, { data: body });
 		const occurredAt = DateTime.fromISO(event.occurredAt, { setZone: true });
 
 		if (!occurredAt.isValid) {
@@ -122,14 +146,20 @@ export default class RecordBrowserEventController {
 						name: event.name,
 						properties: event.properties,
 					})
-				: await this.recordBrowserEvent.execute({
-						...context,
-						type: 'pageview',
-						referrer: event.referrer,
-						utmSource: event.utmSource,
-						utmMedium: event.utmMedium,
-						utmCampaign: event.utmCampaign,
-					});
+				: event.name === '$identify'
+					? await this.recordBrowserEvent.execute({
+							...context,
+							type: 'identify',
+							distinctId: event.distinctId,
+						})
+					: await this.recordBrowserEvent.execute({
+							...context,
+							type: 'pageview',
+							referrer: event.referrer,
+							utmSource: event.utmSource,
+							utmMedium: event.utmMedium,
+							utmCampaign: event.utmCampaign,
+						});
 
 		if (!result.ok) {
 			return result.error.type === 'collection_forbidden'

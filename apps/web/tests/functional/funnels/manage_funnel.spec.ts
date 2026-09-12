@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto';
 import app from '@adonisjs/core/services/app';
 import { test } from '@japa/runner';
 import { sql } from 'kysely';
+import { EventSource } from '#collection/event_source';
 import { CreateFunnel } from '#funnels/actions/create_funnel';
 import { UpdateFunnel } from '#funnels/actions/update_funnel';
+import { FunnelEditorQuery } from '#funnels/queries/funnel_editor_query';
 import { db } from '#shared/services/db';
 
 test.group('Manage Funnel', (group) => {
@@ -171,6 +173,57 @@ test.group('Manage Funnel', (group) => {
 			await db.selectFrom('funnels').selectAll().where('id', '=', created.value.id).executeTakeFirstOrThrow(),
 			{ identity_kind: 'distinct_id', conversion_window_seconds: 7 * 24 * 60 * 60 },
 		);
+	});
+
+	test('offers identified anonymous event names to Product Funnel editors', async ({ assert }) => {
+		const { ownerUserId, websiteId } = await createWebsite('product');
+		const baseEvent = {
+			source: EventSource.Browser,
+			occurred_at: new Date('2026-03-10T10:00:00.000Z'),
+			path: '/',
+		};
+		await db
+			.insertInto('events')
+			.values([
+				{
+					...baseEvent,
+					id: randomUUID(),
+					website_id: websiteId,
+					name: 'pricing_viewed',
+					anonymous_id: 'identified-anonymous',
+				},
+				{
+					...baseEvent,
+					id: randomUUID(),
+					website_id: websiteId,
+					name: 'unlinked_anonymous_event',
+					anonymous_id: 'unlinked-anonymous',
+				},
+				{
+					...baseEvent,
+					id: randomUUID(),
+					website_id: websiteId,
+					name: '$identify',
+					occurred_at: new Date('2026-03-10T11:00:00.000Z'),
+					anonymous_id: 'identified-anonymous',
+					session_id: null,
+					distinct_id: 'product-a',
+					properties: null,
+				},
+				{
+					...baseEvent,
+					id: randomUUID(),
+					website_id: websiteId,
+					name: 'signup',
+					distinct_id: 'product-a',
+				},
+			])
+			.execute();
+
+		const query = await app.container.make(FunnelEditorQuery);
+		const editor = await query.execute(websiteId, ownerUserId, undefined, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.deepEqual(editor?.eventNames, ['$pageview', 'pricing_viewed', 'signup']);
 	});
 
 	test('database rejects persisted filters that the read model cannot decode', async ({ assert }) => {

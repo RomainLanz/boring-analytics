@@ -109,7 +109,17 @@ export class FunnelEditorQuery {
 		let eventNamesQuery = database.selectFrom('events').select('name').distinct().where('website_id', '=', website.id);
 		eventNamesQuery =
 			identityKind === 'distinct_id'
-				? eventNamesQuery.where('distinct_id', 'is not', null)
+				? eventNamesQuery.where('name', '!=', '$identify').where(sql<boolean>`(
+						events.distinct_id is not null
+						or exists (
+							select 1
+							from events as identification
+							where identification.website_id = events.website_id
+								and identification.name = '$identify'
+								and identification.anonymous_id = events.anonymous_id
+								and events.occurred_at <= identification.occurred_at
+						)
+					)`)
 				: eventNamesQuery.where('session_id', 'is not', null);
 		const eventRows = await eventNamesQuery.orderBy('name').execute();
 		const { startDate, endDate } = websiteReportPeriod(website.id, website.timezone, now);

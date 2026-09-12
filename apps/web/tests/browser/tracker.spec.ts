@@ -230,6 +230,44 @@ test.group('Browser tracker', (group) => {
 		]);
 	});
 
+	test('identifies the current anonymous browser before using Product identity', async ({ assert, browserContext }) => {
+		const trackingId = await createWebsite('product');
+		const page = await browserContext.newPage();
+
+		await page.goto(trackedPageUrl(trackingId, '/pricing', 'no-referrer').href);
+		await waitForEvents(1);
+		const rejected = await page.evaluate(
+			(limit) => [
+				window.boringAnalytics?.identify(''),
+				window.boringAnalytics?.identify('x'.repeat(limit + 1)),
+				window.boringAnalytics?.identify({ id: 'opaque' } as never),
+			],
+			browserEventProtocol.maxDistinctIdLength,
+		);
+		const identified = await page.evaluate(() => window.boringAnalytics?.identify('account_opaque_a'));
+		await waitForEvents(2);
+		const tracked = await page.evaluate(() => window.boringAnalytics?.track('signup'));
+		await waitForEvents(3);
+
+		assert.deepEqual(rejected, [false, false, false]);
+		assert.isTrue(identified);
+		assert.isTrue(tracked);
+		const events = await db
+			.selectFrom('events')
+			.select(['name', 'anonymous_id', 'session_id', 'distinct_id'])
+			.orderBy('received_at')
+			.execute();
+		assert.match(events[0]?.anonymous_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
+		assert.equal(events[1]?.anonymous_id, events[0]?.anonymous_id);
+		assert.deepInclude(events[1], { name: '$identify', session_id: null, distinct_id: 'account_opaque_a' });
+		assert.deepInclude(events[2], {
+			name: 'signup',
+			anonymous_id: null,
+			session_id: null,
+			distinct_id: 'account_opaque_a',
+		});
+	});
+
 	test('drops invalid and oversized custom events before transport', async ({ assert, browserContext }) => {
 		const trackingId = await createWebsite();
 		const page = await browserContext.newPage();

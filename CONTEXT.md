@@ -18,17 +18,22 @@ The default Website identity mode. Boring Analytics derives rotating anonymous a
 request context, then discards the raw IP address and User-Agent.
 
 **Product Mode**:
-A Website identity mode where the integrating application supplies an opaque pseudonymous Distinct ID with every
-browser and server event. Boring Analytics stores no Person or profile and does not infer whether an identifier contains
-personal data.
+A Website identity mode where browser events may start anonymously before the integrating application identifies the
+current anonymous identity with an opaque pseudonymous Distinct ID. Server events require the Distinct ID. Boring
+Analytics stores no Person or profile and does not infer whether an identifier contains personal data.
 
 **Distinct ID**:
 An opaque pseudonymous identifier supplied by an integrating application in Product Mode. It links future events that
-carry the same value. It does not merge earlier Anonymous Mode events or create a user profile.
+carry the same value and anonymous browser events explicitly associated through `$identify`. It does not create a user
+profile.
+
+**Identification**:
+A Website-scoped, first-write-wins association from one rotating Anonymous ID to one Distinct ID. It attributes only
+anonymous events that occurred no later than `$identify`. Multiple Anonymous IDs may identify the same Distinct ID.
 
 **Event**:
-An append-only fact received for a Website. Browser events are either the reserved `$pageview` event or a custom event
-whose name does not start with `$`.
+An append-only fact received for a Website. Browser events are the reserved `$pageview` and `$identify` system events,
+or a custom event whose name does not start with `$`.
 
 **Funnel**:
 An ordered sequence of Events counted by one persisted identity kind. Anonymous Funnels use `session_id` and a maximum

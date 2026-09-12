@@ -223,11 +223,12 @@ It never stores the raw IP or User-Agent.
 
 ### Product Mode
 
-An owner can change a Website to Product Mode from Settings. Product Mode requires the integrating application to send
-an opaque pseudonymous `distinctId` with every browser and server event. Boring Analytics persists it as `distinct_id`.
-The value must be a non-empty string of at most 255 characters. Numbers, objects, arrays, NUL, and malformed UTF-16 are
-rejected. Boring Analytics does not accept separate name or email identity fields and does not inspect identifiers for
-personal data. The integrating application is responsible for generating a value that contains no direct personal data.
+An owner can change a Website to Product Mode from Settings. Browser events without a `distinctId` remain anonymous
+until the integrating application explicitly identifies the current browser. Browser events after identification and
+all server events use an opaque pseudonymous `distinctId`, which Boring Analytics persists as `distinct_id`. The value
+must be a non-empty string of at most 255 characters. Numbers, objects, arrays, NUL, and malformed UTF-16 are rejected.
+Boring Analytics does not accept name, email, traits, or profile fields and does not inspect identifiers for personal
+data. The integrating application is responsible for generating a value that contains no direct personal data.
 
 Supply the identity needed by the automatic first pageview on the tracker script:
 
@@ -239,20 +240,39 @@ Supply the identity needed by the automatic first pageview on the tracker script
 ></script>
 ```
 
-The existing custom-event API keeps the same shape. When a single-page application changes account, update the identity
-before sending later events:
+When the browser starts anonymously, identify it as soon as the application obtains its Product identity:
+
+```js
+window.boringAnalytics?.identify('opaque-account-42');
+window.boringAnalytics?.track('signup');
+```
+
+`identify` sends the reserved `$identify` system event with the server-derived current Anonymous ID, then switches future
+tracker events to the supplied Distinct ID. It returns `false`, sends nothing, and keeps the current identity when input
+validation, Do Not Track, path validation, or the payload limit rejects the call. The collector accepts `$identify` only
+for Product Websites. It stores the Anonymous ID, Distinct ID, event timestamps, and path, but never the raw IP or
+User-Agent.
+
+An Anonymous ID can link only once. Repeating the same identification is idempotent. If later calls submit another
+Distinct ID for that Anonymous ID, the first persisted link wins. Multiple Anonymous IDs may link to one Distinct ID.
+Product Funnels attribute anonymous events from the same Website when their `occurredAt` is before or equal to the
+identification timestamp. This includes an earlier event received after `$identify`; it excludes events whose
+`occurredAt` is later. The daily Anonymous ID rotation limits attribution to the captured identity. The Website boundary
+also separates owners, and each Distinct ID counts once even when several Anonymous IDs link to it. Switching Website
+mode leaves persisted links and existing Funnel identity kinds unchanged. Anonymous Funnels continue to use only
+`session_id`.
+
+Use `setDistinctId` instead when no anonymous acquisition should be associated, for example when changing accounts in a
+single-page application:
 
 ```js
 window.boringAnalytics?.setDistinctId('opaque-account-84');
 window.boringAnalytics?.track('checkout_started', { plan: 'pro' });
 ```
 
-`setDistinctId` returns `false` and keeps the previous value when validation fails. It changes only future events. It
-does not identify, alias, or merge prior events. Switching a Website mode also leaves all historical events and Funnels
-unchanged. Anonymous events do not gain a Distinct ID, and Product events do not gain anonymous or session identity.
-
-`$identify`, retroactive Anonymous-to-Product merging, aliases, profiles, event attribution before identification,
-batching, and deduplication are deferred to later tracers.
+`setDistinctId` returns `false` and keeps the previous value when validation fails. It changes only future events and
+does not create an identification link. Arbitrary aliases, profiles, traits, transitive identity merging, batching, and
+general deduplication remain out of scope.
 
 ### Server events
 
@@ -279,7 +299,8 @@ JSON
 
 The endpoint returns `202 Accepted` and records the event with a server source. It does not require an `Origin` header
 and does not create anonymous or session identity. Omit `distinctId` for an Anonymous Website; it is required for a
-Product Website. Names, paths, properties, timestamps, the 4 KiB payload limit, and
+Product Website. The server API does not accept `$identify`, because a server request has no current anonymous browser
+identity to associate. Names, paths, properties, timestamps, the 4 KiB payload limit, and
 JSON media type follow the browser custom-event contract above. Missing, malformed, incorrect, and revoked keys all
 return `401` with `{ "error": "invalid_server_key" }`.
 

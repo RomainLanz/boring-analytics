@@ -1,5 +1,5 @@
 import { inject } from '@adonisjs/core';
-import { validateEventIdentity, type EventIdentityError } from '#collection/event_identity';
+import { validateBrowserEventIdentity, type EventIdentityError } from '#collection/event_identity';
 import { isAcceptableEventTime } from '#collection/event_time';
 import { EventRepository } from '#collection/repositories/event_repository';
 import { AnonymousIdentity } from '#collection/services/anonymous_identity';
@@ -27,6 +27,7 @@ export type RecordBrowserEventParams = BrowserEventContext &
 				utmCampaign: string | null;
 		  }
 		| { type: 'custom'; name: string; properties: EventProperties }
+		| { type: 'identify'; distinctId: string }
 	);
 
 type RecordBrowserEventError =
@@ -80,14 +81,30 @@ export class RecordBrowserEvent {
 			return err({ type: 'invalid_referrer' });
 		}
 
-		const identity = validateEventIdentity(target.identityMode, params.distinctId);
+		const identity = validateBrowserEventIdentity(target.identityMode, params.distinctId);
 
 		if (!identity.ok) {
 			return identity;
 		}
 
+		if (params.type === 'identify') {
+			const currentIdentity = this.anonymousIdentity.derive({
+				websiteId: target.id,
+				ip: params.ip,
+				userAgent: params.userAgent,
+				receivedAt,
+			});
+			await this.events.appendBrowserIdentification(target.id, {
+				occurredAt: params.occurredAt,
+				path: params.path,
+				anonymousId: currentIdentity.anonymousId,
+				distinctId: params.distinctId,
+			});
+			return ok(undefined);
+		}
+
 		const anonymousIdentity =
-			target.identityMode === 'anonymous'
+			identity.value === null
 				? this.anonymousIdentity.derive({
 						websiteId: target.id,
 						ip: params.ip,

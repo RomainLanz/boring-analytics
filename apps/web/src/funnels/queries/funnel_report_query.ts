@@ -104,7 +104,6 @@ export class FunnelReportQuery {
 
 		const persistedSteps = funnel.persisted_steps;
 		const identityKind = parseFunnelIdentityKind(funnel.identity_kind);
-		const identityColumn = sql.ref(`events.${identityKind}`);
 		const conversionWindowMilliseconds = funnel.conversion_window_seconds * 1_000;
 		const cohortPeriodEnd =
 			identityKind === 'distinct_id' ? new Date(now.getTime() - conversionWindowMilliseconds) : now;
@@ -121,27 +120,106 @@ export class FunnelReportQuery {
 				return sql`(${step.position}::smallint, ${step.event_name}::text, ${filter})`;
 			}),
 		);
+		const seedEventCandidates =
+			identityKind === 'distinct_id'
+				? sql`
+					select events.distinct_id as identity_id, events.id, events.occurred_at, events.received_at
+					from events
+					inner join steps on steps.position = 1 and steps.event_name = events.name
+					where events.website_id = ${funnel.website_id}
+						and events.distinct_id is not null
+						and events.name <> '$identify'
+						and events.occurred_at >= ${periodStart}
+						and events.occurred_at < ${periodEnd}
+						and events.occurred_at <= ${matureBefore}
+						and ${this.#matchesFilter(sql.ref('steps.filter'), sql.ref('events'))}
+
+					union all
+
+					select identification.distinct_id as identity_id, events.id, events.occurred_at, events.received_at
+					from events
+					inner join events as identification
+						on identification.website_id = events.website_id
+						and identification.name = '$identify'
+						and identification.anonymous_id = events.anonymous_id
+						and events.occurred_at <= identification.occurred_at
+					inner join steps on steps.position = 1 and steps.event_name = events.name
+					where events.website_id = ${funnel.website_id}
+						and events.distinct_id is null
+						and events.anonymous_id is not null
+						and events.occurred_at >= ${periodStart}
+						and events.occurred_at < ${periodEnd}
+						and events.occurred_at <= ${matureBefore}
+						and ${this.#matchesFilter(sql.ref('steps.filter'), sql.ref('events'))}
+				`
+				: sql`
+					select events.session_id as identity_id, events.id, events.occurred_at, events.received_at
+					from events
+					inner join steps on steps.position = 1 and steps.event_name = events.name
+					where events.website_id = ${funnel.website_id}
+						and events.session_id is not null
+						and events.occurred_at >= ${periodStart}
+						and events.occurred_at < ${periodEnd}
+						and events.occurred_at <= ${matureBefore}
+						and ${this.#matchesFilter(sql.ref('steps.filter'), sql.ref('events'))}
+				`;
+		const nextEventCandidates =
+			identityKind === 'distinct_id'
+				? sql`
+					select events.id, events.occurred_at, events.received_at
+					from events
+					where events.website_id = ${funnel.website_id}
+						and events.distinct_id = chain.identity_id
+						and events.name = next_step.event_name
+						and (events.occurred_at, events.received_at, events.id) >
+							(chain.occurred_at, chain.received_at, chain.id)
+						and events.occurred_at <= chain.first_step_at + make_interval(secs => ${funnel.conversion_window_seconds})
+						and ${this.#matchesFilter(sql.ref('next_step.filter'), sql.ref('events'))}
+
+					union all
+
+					select events.id, events.occurred_at, events.received_at
+					from events
+					inner join events as identification
+						on identification.website_id = events.website_id
+						and identification.name = '$identify'
+						and identification.anonymous_id = events.anonymous_id
+						and identification.distinct_id = chain.identity_id
+						and events.occurred_at <= identification.occurred_at
+					where events.website_id = ${funnel.website_id}
+						and events.distinct_id is null
+						and events.anonymous_id is not null
+						and events.name = next_step.event_name
+						and (events.occurred_at, events.received_at, events.id) >
+							(chain.occurred_at, chain.received_at, chain.id)
+						and events.occurred_at <= chain.first_step_at + make_interval(secs => ${funnel.conversion_window_seconds})
+						and ${this.#matchesFilter(sql.ref('next_step.filter'), sql.ref('events'))}
+				`
+				: sql`
+					select events.id, events.occurred_at, events.received_at
+					from events
+					where events.website_id = ${funnel.website_id}
+						and events.session_id = chain.identity_id
+						and events.name = next_step.event_name
+						and (events.occurred_at, events.received_at, events.id) >
+							(chain.occurred_at, chain.received_at, chain.id)
+						and events.occurred_at <= chain.first_step_at + make_interval(secs => ${funnel.conversion_window_seconds})
+						and ${this.#matchesFilter(sql.ref('next_step.filter'), sql.ref('events'))}
+				`;
 		const aggregates = await sql<StepAggregate>`
 			with recursive steps(position, event_name, filter) as (
 				values ${capturedSteps}
 			), seed_candidates as (
 				select
-					${identityColumn} as identity_id,
-					events.id,
-					events.occurred_at,
-					events.received_at,
+					candidates.identity_id,
+					candidates.id,
+					candidates.occurred_at,
+					candidates.received_at,
 					row_number() over (
-						partition by ${identityColumn}
-						order by events.occurred_at, events.received_at, events.id
+						partition by candidates.identity_id
+						order by candidates.occurred_at, candidates.received_at, candidates.id
 					) as candidate_number
-				from events
-				inner join steps on steps.position = 1 and steps.event_name = events.name
-				where events.website_id = ${funnel.website_id}
-					and ${identityColumn} is not null
-					and events.occurred_at >= ${periodStart}
-					and events.occurred_at < ${periodEnd}
-					and events.occurred_at <= ${matureBefore}
-					and ${this.#matchesFilter(sql.ref('steps.filter'), sql.ref('events'))}
+				from (${seedEventCandidates}) as candidates
 			), chain as (
 				select
 					seed.identity_id,
@@ -167,16 +245,9 @@ export class FunnelReportQuery {
 				from chain
 				inner join steps as next_step on next_step.position = chain.position + 1
 				inner join lateral (
-					select events.id, events.occurred_at, events.received_at
-					from events
-					where events.website_id = ${funnel.website_id}
-						and ${identityColumn} = chain.identity_id
-						and events.name = next_step.event_name
-						and (events.occurred_at, events.received_at, events.id) >
-							(chain.occurred_at, chain.received_at, chain.id)
-						and events.occurred_at <= chain.first_step_at + make_interval(secs => ${funnel.conversion_window_seconds})
-						and ${this.#matchesFilter(sql.ref('next_step.filter'), sql.ref('events'))}
-					order by events.occurred_at, events.received_at, events.id
+					select candidates.id, candidates.occurred_at, candidates.received_at
+					from (${nextEventCandidates}) as candidates
+					order by candidates.occurred_at, candidates.received_at, candidates.id
 					limit 1
 				) as next_event on true
 			)
