@@ -18,6 +18,7 @@ export interface ApiDefinition {
     create: typeof routes['websites.create']
     store: typeof routes['websites.store']
     show: typeof routes['websites.show']
+    events: typeof routes['websites.events']
   }
   events: {
     store: typeof routes['events.store']

@@ -5,7 +5,7 @@
 
 export const controllers = {
   collection: {
-    RecordPageview: () => import('#app/collection/controllers/record_pageview_controller'),
+    RecordBrowserEvent: () => import('#app/collection/controllers/record_browser_event_controller'),
   },
   identity: {
     Account: () => import('#app/identity/controllers/account_controller'),
@@ -16,5 +16,6 @@ export const controllers = {
   websites: {
     CreateWebsite: () => import('#app/websites/controllers/create_website_controller'),
     Website: () => import('#app/websites/controllers/website_controller'),
+    WebsiteEvents: () => import('#app/websites/controllers/website_events_controller'),
   },
 }

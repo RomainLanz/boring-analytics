@@ -60,6 +60,12 @@ const routes = {
     tokens: [{"old":"/websites/:id","type":0,"val":"websites","end":""},{"old":"/websites/:id","type":1,"val":"id","end":""}],
     types: placeholder as Registry['websites.show']['types'],
   },
+  'websites.events': {
+    methods: ["GET","HEAD"],
+    pattern: '/websites/:id/events',
+    tokens: [{"old":"/websites/:id/events","type":0,"val":"websites","end":""},{"old":"/websites/:id/events","type":1,"val":"id","end":""},{"old":"/websites/:id/events","type":0,"val":"events","end":""}],
+    types: placeholder as Registry['websites.events']['types'],
+  },
   'events.store': {
     methods: ["POST"],
     pattern: '/api/events',

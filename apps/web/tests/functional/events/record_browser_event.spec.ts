@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import limiter from '@adonisjs/limiter/services/main';
 import { test } from '@japa/runner';
+import { browserEventProtocol } from '#collection/browser_event_protocol';
 import { EventSource } from '#collection/event_source';
-import { pageviewProtocol } from '#collection/pageview_protocol';
 import { db } from '#shared/services/db';
 import { collectionLimits } from '#start/limiter';
 
@@ -62,6 +62,32 @@ async function postEvent(
 	});
 }
 
+async function postCustomEvent(
+	trackingId: string,
+	body: Record<string, unknown>,
+	origin = 'https://example.com',
+	ip = '203.0.113.42',
+) {
+	return fetch(endpoint, {
+		method: 'POST',
+		headers: {
+			'accept': 'application/json',
+			'content-type': 'application/json',
+			origin,
+			'x-forwarded-for': ip,
+			'user-agent': 'Custom Event Browser',
+		},
+		body: JSON.stringify({
+			trackingId,
+			name: 'signup',
+			occurredAt: new Date().toISOString(),
+			path: '/pricing',
+			properties: {},
+			...body,
+		}),
+	});
+}
+
 async function postRaw(body: string, contentType: string, ip = '203.0.113.42') {
 	return fetch(endpoint, {
 		method: 'POST',
@@ -108,6 +134,46 @@ test.group('POST /api/events', (group) => {
 		assert.equal(event.utm_source, 'newsletter');
 		assert.equal(event.utm_medium, 'email');
 		assert.equal(event.utm_campaign, 'launch');
+		assert.match(event.anonymous_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
+		assert.match(event.session_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
+		assert.notProperty(event, 'ip');
+		assert.notProperty(event, 'user_agent');
+	});
+
+	test('keeps pageview empty nullable fields normalized to null', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+
+		const response = await postEvent(trackingId, {
+			referrer: '',
+			utmSource: '',
+			utmMedium: '',
+			utmCampaign: '',
+		});
+
+		assert.equal(response.status, 202);
+		const event = await db
+			.selectFrom('events')
+			.select(['referrer', 'utm_source', 'utm_medium', 'utm_campaign'])
+			.executeTakeFirstOrThrow();
+		assert.deepEqual(event, { referrer: null, utm_source: null, utm_medium: null, utm_campaign: null });
+	});
+
+	test('accepts primitive custom event properties with the anonymous browser identity', async ({ assert }) => {
+		const { websiteId, trackingId } = await createWebsite();
+
+		const response = await postCustomEvent(trackingId, {
+			properties: { plan: 'pro', seats: 3, trial: true, coupon: null, empty: '' },
+		});
+
+		assert.equal(response.status, 202);
+		const event = await db.selectFrom('events').selectAll().executeTakeFirstOrThrow();
+		assert.equal(event.website_id, websiteId);
+		assert.equal(event.name, 'signup');
+		assert.equal(event.path, '/pricing');
+		assert.equal(event.source, EventSource.Browser);
+		assert.deepEqual(event.properties, { plan: 'pro', seats: 3, trial: true, coupon: null, empty: '' });
+		assert.isNull(event.referrer);
+		assert.isNull(event.utm_source);
 		assert.match(event.anonymous_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
 		assert.match(event.session_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
 		assert.notProperty(event, 'ip');
@@ -168,7 +234,7 @@ test.group('POST /api/events', (group) => {
 			{ path: '/pricing\n' },
 			{ path: '\n/pricing' },
 			{ path: ' /pricing' },
-			{ path: `/${'a'.repeat(pageviewProtocol.maxPathLength - 1)} ` },
+			{ path: `/${'a'.repeat(browserEventProtocol.maxPathLength - 1)} ` },
 			{ properties: {} },
 			{ utmCampaign: undefined },
 			{ referrer: 'https://user:password@example.com/private' },
@@ -183,13 +249,45 @@ test.group('POST /api/events', (group) => {
 		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
 	});
 
+	test('rejects reserved custom names, nested values, and property limits', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const invalidEvents = [
+			{ name: '$signup' },
+			{ name: ' '.repeat(2) },
+			{ name: 'signup\uD800' },
+			{ name: 'signup\uDC00' },
+			{ name: `signup${'x'.repeat(browserEventProtocol.maxNameLength)}` },
+			{ properties: { context: { plan: 'pro' } } },
+			{ properties: { steps: [1, 2] } },
+			{ properties: { value: '\u0000' } },
+			{ properties: { value: '\uD800' } },
+			{ properties: { plan: 'x'.repeat(browserEventProtocol.maxPropertyStringLength + 1) } },
+			{ properties: { ['x'.repeat(browserEventProtocol.maxPropertyKeyLength + 1)]: true } },
+			{ properties: { ['\uD800']: true } },
+			{ properties: { ['\uDC00']: true } },
+			{ properties: Object.fromEntries([['__proto__', 'pro']]) },
+			{
+				properties: Object.fromEntries(
+					Array.from({ length: browserEventProtocol.maxProperties + 1 }, (_, index) => [`key_${index}`, index]),
+				),
+			},
+		];
+
+		for (const event of invalidEvents) {
+			const response = await postCustomEvent(trackingId, event);
+			assert.equal(response.status, 422, JSON.stringify(event));
+		}
+
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
 	test('rejects JSON bodies larger than the collection contract', async ({ assert }) => {
 		const { trackingId } = await createWebsite();
 		const body = JSON.stringify({
 			trackingId,
 			name: '$pageview',
 			path: '/',
-			padding: 'a'.repeat(pageviewProtocol.maxPayloadBytes),
+			padding: 'a'.repeat(browserEventProtocol.maxPayloadBytes),
 		});
 
 		const response = await postRaw(body, 'application/json');

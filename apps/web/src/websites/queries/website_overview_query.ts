@@ -1,7 +1,7 @@
 import { inject } from '@adonisjs/core';
 import { sql } from 'kysely';
-import { DateTime } from 'luxon';
 import { TransactionManager } from '#shared/services/transaction_manager';
+import { websiteReportPeriod } from '#websites/queries/website_report_period';
 
 interface RankedVisitors {
 	name: string;
@@ -51,31 +51,11 @@ export class WebsiteOverviewQuery {
 			return null;
 		}
 
-		const currentTime = DateTime.fromJSDate(now, { zone: 'utc' }).setZone(website.timezone);
-
-		if (!currentTime.isValid) {
-			throw new Error(`Invalid timezone persisted for website ${website.id}`);
-		}
-
-		const endDate = currentTime.toISODate();
-
-		if (!endDate) {
-			throw new Error(`Invalid overview period for website ${website.id}`);
-		}
-
-		const firstCalendarDate = DateTime.fromISO(endDate, { zone: 'utc' }).minus({ days: 29 });
-		const startDate = firstCalendarDate.toISODate();
-
-		if (!startDate) {
-			throw new Error(`Invalid overview period for website ${website.id}`);
-		}
-
-		const firstDate = DateTime.fromISO(startDate, { zone: website.timezone }).startOf('day');
-		const firstInstant = firstDate
-			.getPossibleOffsets()
-			.reduce((earliest, candidate) => (candidate.toMillis() < earliest.toMillis() ? candidate : earliest));
-		const periodStart = firstInstant.toUTC().toJSDate();
-		const periodEnd = DateTime.fromJSDate(now, { zone: 'utc' }).toJSDate();
+		const { startDate, endDate, dates, periodStart, periodEnd } = websiteReportPeriod(
+			website.id,
+			website.timezone,
+			now,
+		);
 		const pageviews = database
 			.selectFrom('events')
 			.where('events.website_id', '=', website.id)
@@ -162,15 +142,7 @@ export class WebsiteOverviewQuery {
 		]);
 
 		const dailyCounts = new Map(dailyPageviews.map((day) => [day.date, day.pageviews]));
-		const trend = Array.from({ length: 30 }, (_, index) => {
-			const date = firstCalendarDate.plus({ days: index }).toISODate();
-
-			if (!date) {
-				throw new Error(`Invalid overview period for website ${website.id}`);
-			}
-
-			return { date, pageviews: dailyCounts.get(date) ?? 0 };
-		});
+		const trend = dates.map((date) => ({ date, pageviews: dailyCounts.get(date) ?? 0 }));
 
 		return {
 			website: {

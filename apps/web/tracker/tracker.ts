@@ -1,6 +1,20 @@
 /// <reference lib="dom" />
 
-import { normalizePageviewPath, pageviewProtocol } from '#collection/pageview_protocol';
+import {
+	browserEventProtocol,
+	customEventNamePattern,
+	isValidEventProperties,
+	normalizeBrowserEventPath,
+} from '#collection/browser_event_protocol';
+import type { EventProperties } from '#collection/browser_event_protocol';
+
+declare global {
+	interface Window {
+		boringAnalytics?: {
+			track(name: string, properties?: EventProperties): boolean;
+		};
+	}
+}
 
 const script = document.currentScript as HTMLScriptElement | null;
 const trackingId = script?.dataset.websiteId;
@@ -10,7 +24,7 @@ const doNotTrack = [navigator.doNotTrack, windowDoNotTrack, microsoftDoNotTrack]
 	['1', 'yes'].includes(value ?? ''),
 );
 
-if (script && trackingId && !doNotTrack) {
+if (script && trackingId) {
 	const endpoint = new URL('/api/events', script.src).href;
 	let previousUrl = window.location.href;
 	let referrer = withoutQueryOrFragment(document.referrer);
@@ -23,22 +37,74 @@ if (script && trackingId && !doNotTrack) {
 		try {
 			const url = new URL(value);
 			const referrerUrl = `${url.origin}${url.pathname}`;
-			return referrerUrl.length <= pageviewProtocol.maxReferrerLength ? referrerUrl : null;
+			return referrerUrl.length <= browserEventProtocol.maxReferrerLength ? referrerUrl : null;
 		} catch {
 			return null;
 		}
 	}
 
 	function utmParameter(value: string | null) {
-		const parameter = value?.slice(0, pageviewProtocol.maxUtmLength);
+		const parameter = value?.slice(0, browserEventProtocol.maxUtmLength);
 		return parameter && !/\p{Cc}/u.test(parameter) ? parameter : null;
+	}
+
+	function send(event: object) {
+		const body = JSON.stringify(event);
+		const payload = new Blob([body], { type: 'application/json' });
+
+		if (payload.size > browserEventProtocol.maxPayloadBytes) {
+			return false;
+		}
+
+		const sent = navigator.sendBeacon?.(endpoint, payload);
+
+		if (!sent) {
+			void fetch(endpoint, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body,
+				keepalive: true,
+				credentials: 'omit',
+			}).catch(() => undefined);
+		}
+
+		return true;
+	}
+
+	function currentPath() {
+		const url = new URL(window.location.href);
+		const path = normalizeBrowserEventPath(url.pathname);
+		return path.length <= browserEventProtocol.maxPathLength ? path : null;
+	}
+
+	function collectCustomEvent(name: string, properties: EventProperties = {}) {
+		const path = currentPath();
+
+		if (
+			doNotTrack ||
+			path === null ||
+			typeof name !== 'string' ||
+			name.length > browserEventProtocol.maxNameLength ||
+			!customEventNamePattern.test(name) ||
+			!isValidEventProperties(properties)
+		) {
+			return false;
+		}
+
+		return send({
+			trackingId,
+			name,
+			occurredAt: new Date().toISOString(),
+			path,
+			properties: { ...properties },
+		});
 	}
 
 	function collectPageview() {
 		const url = new URL(window.location.href);
-		const path = normalizePageviewPath(url.pathname);
+		const path = currentPath();
 
-		if (path.length > pageviewProtocol.maxPathLength) {
+		if (doNotTrack || path === null) {
 			referrer = withoutQueryOrFragment(url.href);
 			return;
 		}
@@ -53,31 +119,16 @@ if (script && trackingId && !doNotTrack) {
 			utmMedium: utmParameter(url.searchParams.get('utm_medium')),
 			utmCampaign: utmParameter(url.searchParams.get('utm_campaign')),
 		};
-		let body = JSON.stringify(event);
-		let payload = new Blob([body], { type: 'application/json' });
 
 		for (const field of ['referrer', 'utmCampaign', 'utmMedium', 'utmSource'] as const) {
-			if (payload.size <= pageviewProtocol.maxPayloadBytes) {
+			if (new Blob([JSON.stringify(event)]).size <= browserEventProtocol.maxPayloadBytes) {
 				break;
 			}
 
 			event[field] = null;
-			body = JSON.stringify(event);
-			payload = new Blob([body], { type: 'application/json' });
 		}
 
-		const sent = payload.size <= pageviewProtocol.maxPayloadBytes && navigator.sendBeacon?.(endpoint, payload);
-
-		if (payload.size <= pageviewProtocol.maxPayloadBytes && !sent) {
-			void fetch(endpoint, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body,
-				keepalive: true,
-				credentials: 'omit',
-			}).catch(() => undefined);
-		}
-
+		send(event);
 		referrer = withoutQueryOrFragment(url.href);
 	}
 
@@ -105,5 +156,6 @@ if (script && trackingId && !doNotTrack) {
 			collectPageview();
 		}
 	});
+	window.boringAnalytics = { track: collectCustomEvent };
 	collectPageview();
 }

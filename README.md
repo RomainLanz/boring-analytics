@@ -195,6 +195,32 @@ proxies allowed to provide `X-Forwarded-For`. The example trusts loopback and pr
 containerized proxy. Use the exact ingress CIDRs when the application is reachable through public proxy addresses.
 Requests received directly from an untrusted address ignore forwarded IP headers.
 
+### Custom browser events
+
+The tracker exposes a framework-independent browser API after it loads:
+
+```js
+window.boringAnalytics?.track('signup', {
+	plan: 'pro',
+	trial: true,
+	seats: 3,
+	coupon: null,
+});
+```
+
+Custom event names cannot start with `$`, which is reserved for built-in events. A name must contain 1 to 64
+characters and cannot contain control characters or unpaired UTF-16 surrogates. Each event accepts at most 20
+properties. Property keys must contain 1 to 64
+characters, cannot equal `__proto__`, and cannot contain control characters or unpaired UTF-16 surrogates. Values may
+only be strings, finite numbers, booleans, or `null`; strings may contain at most 255 characters and cannot contain NUL
+or unpaired UTF-16 surrogates. Nested objects and arrays are rejected. The complete JSON request must remain within the
+4 KiB collection limit. `track` returns `false` and sends nothing when its input violates these rules, exceeds the
+payload limit, or Do Not Track is enabled.
+
+Custom events use the same Origin checks, rate limits, timestamp tolerance, and rotating Anonymous Mode identity as
+pageviews. The collector derives identity from the request IP and User-Agent, then persists only the HMAC identifiers.
+It never stores the raw IP or User-Agent.
+
 ## Adding a capability
 
 Use a vertical slice and create only the folders the capability needs:

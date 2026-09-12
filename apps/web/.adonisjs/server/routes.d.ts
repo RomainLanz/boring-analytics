@@ -13,6 +13,7 @@ export type ScannedRoutes = {
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.store': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'events.store': { paramsTuple?: []; params?: {} }
     'home': { paramsTuple?: []; params?: {} }
   }
@@ -22,6 +23,7 @@ export type ScannedRoutes = {
     'account.show': { paramsTuple?: []; params?: {} }
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'home': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
@@ -30,6 +32,7 @@ export type ScannedRoutes = {
     'account.show': { paramsTuple?: []; params?: {} }
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'home': { paramsTuple?: []; params?: {} }
   }
   POST: {

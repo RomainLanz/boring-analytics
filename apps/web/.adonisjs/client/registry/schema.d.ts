@@ -115,16 +115,28 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/website_controller').default['render']>>>
     }
   }
+  'websites.events': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/:id/events'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/website_events_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/website_events_controller').default['render']>>>
+    }
+  }
   'events.store': {
     methods: ["POST"]
     pattern: '/api/events'
     types: {
-      body: ExtractBody<InferInput<(typeof import('#app/collection/controllers/record_pageview_controller').default)['validator']>>
+      body: ExtractBody<InferInput<(typeof import('#app/collection/controllers/record_browser_event_controller').default)['pageviewValidator']>|InferInput<(typeof import('#app/collection/controllers/record_browser_event_controller').default)['customEventValidator']>>
       paramsTuple: []
       params: {}
-      query: ExtractQuery<InferInput<(typeof import('#app/collection/controllers/record_pageview_controller').default)['validator']>>
-      response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/record_pageview_controller').default['execute']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_pageview_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+      query: ExtractQuery<InferInput<(typeof import('#app/collection/controllers/record_browser_event_controller').default)['pageviewValidator']>|InferInput<(typeof import('#app/collection/controllers/record_browser_event_controller').default)['customEventValidator']>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/record_browser_event_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_browser_event_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
   'home': {

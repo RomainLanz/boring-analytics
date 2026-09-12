@@ -4,21 +4,30 @@ import { AnonymousIdentity } from '#collection/services/anonymous_identity';
 import { err, ok, type Result } from '#core/result';
 import env from '#start/env';
 import { WebsiteRepository } from '#websites/repositories/website_repository';
+import type { EventProperties } from '#collection/browser_event_protocol';
 
-export interface RecordPageviewParams {
+interface BrowserEventContext {
 	trackingId: string;
 	origin: string;
 	path: string;
 	occurredAt: Date;
-	referrer: string | null;
-	utmSource: string | null;
-	utmMedium: string | null;
-	utmCampaign: string | null;
 	ip: string;
 	userAgent: string;
 }
 
-type RecordPageviewError =
+export type RecordBrowserEventParams = BrowserEventContext &
+	(
+		| {
+				type: 'pageview';
+				referrer: string | null;
+				utmSource: string | null;
+				utmMedium: string | null;
+				utmCampaign: string | null;
+		  }
+		| { type: 'custom'; name: string; properties: EventProperties }
+	);
+
+type RecordBrowserEventError =
 	| { type: 'collection_forbidden' }
 	| { type: 'invalid_occurred_at' }
 	| { type: 'invalid_referrer' };
@@ -44,14 +53,14 @@ function sanitizeReferrer(value: string | null): string | null | undefined {
 }
 
 @inject()
-export class RecordPageview {
+export class RecordBrowserEvent {
 	constructor(
 		private readonly websites: WebsiteRepository,
 		private readonly events: EventRepository,
 		private readonly anonymousIdentity: AnonymousIdentity,
 	) {}
 
-	async execute(params: RecordPageviewParams): Promise<Result<void, RecordPageviewError>> {
+	async execute(params: RecordBrowserEventParams): Promise<Result<void, RecordBrowserEventError>> {
 		const target = await this.websites.findCollectionTarget(params.trackingId);
 
 		if (!target || !target.allowedDomain.matchesOrigin(params.origin)) {
@@ -67,7 +76,7 @@ export class RecordPageview {
 			return err({ type: 'invalid_occurred_at' });
 		}
 
-		const referrer = sanitizeReferrer(params.referrer);
+		const referrer = params.type === 'pageview' ? sanitizeReferrer(params.referrer) : null;
 
 		if (referrer === undefined) {
 			return err({ type: 'invalid_referrer' });
@@ -80,13 +89,15 @@ export class RecordPageview {
 			receivedAt,
 		});
 
-		await this.events.appendPageview(target.id, {
+		await this.events.appendBrowserEvent(target.id, {
+			name: params.type === 'pageview' ? '$pageview' : params.name,
 			occurredAt: params.occurredAt,
 			path: params.path,
 			referrer,
-			utmSource: params.utmSource,
-			utmMedium: params.utmMedium,
-			utmCampaign: params.utmCampaign,
+			utmSource: params.type === 'pageview' ? params.utmSource : null,
+			utmMedium: params.type === 'pageview' ? params.utmMedium : null,
+			utmCampaign: params.type === 'pageview' ? params.utmCampaign : null,
+			properties: params.type === 'pageview' ? null : params.properties,
 			anonymousId: identity.anonymousId,
 			sessionId: identity.sessionId,
 		});

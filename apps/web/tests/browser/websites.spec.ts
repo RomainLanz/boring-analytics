@@ -84,6 +84,16 @@ test.group('Websites', (group) => {
 					source: EventSource.Browser,
 					occurred_at: new Date(),
 					path: '/signup',
+					properties: { 'plan': 'pro', 'plan ': 'legacy', 'trial': true, 'variant': 'true' },
+				},
+				{
+					id: randomUUID(),
+					website_id: website.id,
+					name: 'signup',
+					source: EventSource.Browser,
+					occurred_at: new Date(),
+					path: '/signup',
+					properties: { 'plan': 'free', 'plan ': 'next', 'trial': false, 'variant': true },
 				},
 			])
 			.execute();
@@ -121,10 +131,36 @@ test.group('Websites', (group) => {
   src="http://localhost:3333/tracker.js"
 ></script>`,
 		);
+		await createPage.getByRole('link', { name: 'Events', exact: true }).click();
+		await createPage.waitForURL(/\/websites\/[0-9a-f-]+\/events$/u);
+		const knownEvents = createPage.getByRole('table', { name: 'Known custom events' });
+		await knownEvents.getByRole('link', { name: 'signup', exact: true }).waitFor();
+		await createPage.getByText('Selected custom event', { exact: true }).waitFor();
+		assert.equal(
+			await createPage.getByRole('table', { name: 'Daily signup event data' }).locator('tbody tr').count(),
+			30,
+		);
+		await createPage.getByRole('combobox', { name: 'Property key' }).selectOption('plan');
+		await createPage
+			.getByRole('table', { name: 'Top values for plan' })
+			.getByRole('rowheader', { name: '"pro"' })
+			.waitFor();
+		await createPage.getByRole('combobox', { name: 'Property key' }).selectOption({ value: 'plan ' });
+		assert.equal(await createPage.getByRole('combobox', { name: 'Property key' }).inputValue(), 'plan ');
+		await createPage
+			.getByRole('table', { name: 'Top values for plan' })
+			.getByRole('rowheader', { name: '"legacy"' })
+			.waitFor();
+		await createPage.getByRole('combobox', { name: 'Property key' }).selectOption('variant');
+		const variants = createPage.getByRole('table', { name: 'Top values for variant' });
+		await variants.getByRole('rowheader', { name: '"true"', exact: true }).waitFor();
+		await variants.getByRole('rowheader', { name: 'true', exact: true }).waitFor();
 
 		await browserContext.loginAs(outsiderResult.value);
 		const forbiddenPage = await browserContext.newPage();
 		const forbiddenResponse = await forbiddenPage.goto(new URL(`/websites/${website.id}`, createPage.url()).href);
 		assert.equal(forbiddenResponse?.status(), 404);
+		const forbiddenEvents = await forbiddenPage.goto(new URL(`/websites/${website.id}/events`, createPage.url()).href);
+		assert.equal(forbiddenEvents?.status(), 404);
 	});
 });

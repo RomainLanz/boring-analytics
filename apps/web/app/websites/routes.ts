@@ -10,6 +10,10 @@ router
 			.get('/websites/:id', [controllers.websites.Website, 'render'])
 			.where('id', router.matchers.uuid())
 			.as('websites.show');
+		router
+			.get('/websites/:id/events', [controllers.websites.WebsiteEvents, 'render'])
+			.where('id', router.matchers.uuid())
+			.as('websites.events');
 	})
 	.use(webMiddleware)
 	.use(middleware.auth());

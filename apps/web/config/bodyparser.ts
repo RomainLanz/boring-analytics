@@ -1,5 +1,5 @@
 import { defineConfig } from '@adonisjs/core/bodyparser';
-import { pageviewProtocol } from '#collection/pageview_protocol';
+import { browserEventProtocol } from '#collection/browser_event_protocol';
 
 const bodyParserConfig = defineConfig({
 	/**
@@ -29,10 +29,9 @@ const bodyParserConfig = defineConfig({
 	 */
 	json: {
 		/**
-		 * A single collection event, including its path, referrer, and campaign
-		 * fields, must fit within this hard payload limit.
+		 * Every browser event must fit within this hard payload limit.
 		 */
-		limit: `${pageviewProtocol.maxPayloadBytes}b`,
+		limit: `${browserEventProtocol.maxPayloadBytes}b`,
 
 		/**
 		 * Normalize empty string values to null.

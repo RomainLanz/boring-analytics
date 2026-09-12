@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { test } from '@japa/runner';
 import { chromium } from 'playwright';
-import { pageviewProtocol } from '#collection/pageview_protocol';
+import { browserEventProtocol } from '#collection/browser_event_protocol';
 import { db } from '#shared/services/db';
 
 const trackerUrl = 'http://localhost:3333/tracker.js';
@@ -166,6 +166,87 @@ test.group('Browser tracker', (group) => {
 		assert.equal(events[0]?.session_id, events[1]?.session_id);
 	});
 
+	test('exposes a framework-independent custom event API with primitive properties', async ({
+		assert,
+		browserContext,
+	}) => {
+		const trackingId = await createWebsite();
+		const page = await browserContext.newPage();
+
+		await page.goto(trackedPageUrl(trackingId, '/pricing?private=secret', 'no-referrer').href);
+		await waitForEvents(1);
+		const accepted = await page.evaluate(() =>
+			window.boringAnalytics?.track('signup😀', { plan: 'pro', seats: 3, trial: true, coupon: null }),
+		);
+		await waitForEvents(2);
+
+		assert.isTrue(accepted);
+		const events = await db
+			.selectFrom('events')
+			.select(['name', 'path', 'properties', 'anonymous_id', 'session_id'])
+			.orderBy('received_at')
+			.execute();
+		assert.deepInclude(events[1], {
+			name: 'signup😀',
+			path: '/pricing',
+			properties: { plan: 'pro', seats: 3, trial: true, coupon: null },
+		});
+		assert.equal(events[0]?.anonymous_id, events[1]?.anonymous_id);
+		assert.equal(events[0]?.session_id, events[1]?.session_id);
+	});
+
+	test('drops invalid and oversized custom events before transport', async ({ assert, browserContext }) => {
+		const trackingId = await createWebsite();
+		const page = await browserContext.newPage();
+
+		await page.goto(trackedPageUrl(trackingId, '/tracked-page', 'no-referrer').href);
+		await waitForEvents(1);
+		const results = await page.evaluate((limits) => {
+			const track = window.boringAnalytics?.track;
+			return [
+				track?.(null as never),
+				track?.(undefined as never),
+				track?.(42 as never),
+				track?.('$signup'),
+				track?.('signup\uD800'),
+				track?.('signup\uDC00'),
+				track?.('signup', { nested: { plan: 'pro' } } as never),
+				track?.('signup', { value: '\u0000' }),
+				track?.('signup', { value: '\uD800' }),
+				track?.('signup', { ['\uD800']: true }),
+				track?.('signup', { ['\uDC00']: true }),
+				track?.('signup', Object.fromEntries([['__proto__', 'pro']])),
+				track?.(
+					'signup',
+					Object.fromEntries(
+						Array.from({ length: limits.maxProperties }, (_, index) => [
+							`property_${index}`,
+							'x'.repeat(limits.maxPropertyStringLength),
+						]),
+					),
+				),
+			];
+		}, browserEventProtocol);
+		await page.waitForTimeout(100);
+
+		assert.deepEqual(results, [
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+		]);
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 1);
+	});
+
 	test('collects a page restored from the back-forward cache exactly once', async ({ assert }) => {
 		const trackingId = await createWebsite();
 		const browser = await chromium.launch({
@@ -241,9 +322,9 @@ test.group('Browser tracker', (group) => {
 		const page = await browserContext.newPage();
 		const targetPath = `/tracked-${'p'.repeat(1890)}`;
 		const target = trackedPageUrl(trackingId, targetPath, 'no-referrer');
-		target.searchParams.set('utm_source', 's'.repeat(pageviewProtocol.maxUtmLength));
-		target.searchParams.set('utm_medium', 'm'.repeat(pageviewProtocol.maxUtmLength));
-		target.searchParams.set('utm_campaign', 'c'.repeat(pageviewProtocol.maxUtmLength));
+		target.searchParams.set('utm_source', 's'.repeat(browserEventProtocol.maxUtmLength));
+		target.searchParams.set('utm_medium', 'm'.repeat(browserEventProtocol.maxUtmLength));
+		target.searchParams.set('utm_campaign', 'c'.repeat(browserEventProtocol.maxUtmLength));
 		const referrerPage = new URL(`/referrer/${'r'.repeat(1890)}`, fixtureOrigin);
 		referrerPage.searchParams.set('policy', 'unsafe-url');
 		const unprunedBody = JSON.stringify({
@@ -252,11 +333,11 @@ test.group('Browser tracker', (group) => {
 			occurredAt: new Date().toISOString(),
 			path: targetPath,
 			referrer: `${referrerPage.origin}${referrerPage.pathname}`,
-			utmSource: 's'.repeat(pageviewProtocol.maxUtmLength),
-			utmMedium: 'm'.repeat(pageviewProtocol.maxUtmLength),
-			utmCampaign: 'c'.repeat(pageviewProtocol.maxUtmLength),
+			utmSource: 's'.repeat(browserEventProtocol.maxUtmLength),
+			utmMedium: 'm'.repeat(browserEventProtocol.maxUtmLength),
+			utmCampaign: 'c'.repeat(browserEventProtocol.maxUtmLength),
 		});
-		assert.isAbove(Buffer.byteLength(unprunedBody), pageviewProtocol.maxPayloadBytes);
+		assert.isAbove(Buffer.byteLength(unprunedBody), browserEventProtocol.maxPayloadBytes);
 
 		await page.goto(referrerPage.href);
 		await page.evaluate((url) => {
@@ -270,12 +351,12 @@ test.group('Browser tracker', (group) => {
 			.select(['path', 'referrer', 'utm_source', 'utm_medium', 'utm_campaign'])
 			.executeTakeFirstOrThrow();
 		const payloadBytes = await page.evaluate(() => (window as unknown as { __payloadBytes: number }).__payloadBytes);
-		assert.isAtMost(payloadBytes, pageviewProtocol.maxPayloadBytes);
+		assert.isAtMost(payloadBytes, browserEventProtocol.maxPayloadBytes);
 		assert.equal(event.path, targetPath);
 		assert.isNull(event.referrer);
-		assert.equal(event.utm_source, 's'.repeat(pageviewProtocol.maxUtmLength));
-		assert.equal(event.utm_medium, 'm'.repeat(pageviewProtocol.maxUtmLength));
-		assert.equal(event.utm_campaign, 'c'.repeat(pageviewProtocol.maxUtmLength));
+		assert.equal(event.utm_source, 's'.repeat(browserEventProtocol.maxUtmLength));
+		assert.equal(event.utm_medium, 'm'.repeat(browserEventProtocol.maxUtmLength));
+		assert.equal(event.utm_campaign, 'c'.repeat(browserEventProtocol.maxUtmLength));
 	});
 
 	test('discards invalid UTM values without discarding the pageview', async ({ assert, browserContext }) => {
@@ -311,8 +392,10 @@ test.group('Browser tracker', (group) => {
 		const page = await browserContext.newPage();
 
 		await page.goto(trackedPageUrl(trackingId, '/tracked-page-private', 'no-referrer').href);
+		const tracked = await page.evaluate(() => window.boringAnalytics?.track('signup'));
 		await page.waitForTimeout(200);
 
+		assert.isFalse(tracked);
 		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
 	});
 });
