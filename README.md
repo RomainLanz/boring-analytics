@@ -221,6 +221,33 @@ Custom events use the same Origin checks, rate limits, timestamp tolerance, and 
 pageviews. The collector derives identity from the request IP and User-Agent, then persists only the HMAC identifiers.
 It never stores the raw IP or User-Agent.
 
+### Server events
+
+A Website owner can create one active server key from the Website's server-event settings. Copy the returned secret
+when it appears. The application stores its scrypt hash and safe prefix, so it cannot display the secret again. Revoke
+the key and create a replacement if the secret is lost or exposed.
+
+Send one custom event with a Bearer token:
+
+```bash
+curl -X POST "$BORING_ANALYTICS_URL/api/server/events" \
+	-H "Authorization: Bearer $BORING_ANALYTICS_SERVER_KEY" \
+	-H 'Content-Type: application/json' \
+	-d @- <<JSON
+	{
+		"name": "invoice.paid",
+		"occurredAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+		"path": "/billing",
+		"properties": { "amount": 49, "currency": "CHF" }
+	}
+JSON
+```
+
+The endpoint returns `202 Accepted` and records the event with a server source. It does not require an `Origin` header
+and does not create anonymous or session identity. Names, paths, properties, timestamps, the 4 KiB payload limit, and
+JSON media type follow the browser custom-event contract above. Missing, malformed, incorrect, and revoked keys all
+return `401` with `{ "error": "invalid_server_key" }`.
+
 ## Adding a capability
 
 Use a vertical slice and create only the folders the capability needs:

@@ -1,8 +1,8 @@
 import { inject } from '@adonisjs/core';
+import { isAcceptableEventTime } from '#collection/event_time';
 import { EventRepository } from '#collection/repositories/event_repository';
 import { AnonymousIdentity } from '#collection/services/anonymous_identity';
 import { err, ok, type Result } from '#core/result';
-import env from '#start/env';
 import { WebsiteRepository } from '#websites/repositories/website_repository';
 import type { EventProperties } from '#collection/browser_event_protocol';
 
@@ -31,8 +31,6 @@ type RecordBrowserEventError =
 	| { type: 'collection_forbidden' }
 	| { type: 'invalid_occurred_at' }
 	| { type: 'invalid_referrer' };
-
-const EVENT_TIME_TOLERANCE_MS = env.get('EVENT_TIME_TOLERANCE_HOURS') * 60 * 60 * 1000;
 
 function sanitizeReferrer(value: string | null): string | null | undefined {
 	if (value === null) {
@@ -69,10 +67,7 @@ export class RecordBrowserEvent {
 
 		const receivedAt = new Date();
 
-		if (
-			!Number.isFinite(params.occurredAt.getTime()) ||
-			Math.abs(receivedAt.getTime() - params.occurredAt.getTime()) > EVENT_TIME_TOLERANCE_MS
-		) {
+		if (!isAcceptableEventTime(params.occurredAt, receivedAt)) {
 			return err({ type: 'invalid_occurred_at' });
 		}
 

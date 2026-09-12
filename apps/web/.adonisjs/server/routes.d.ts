@@ -15,6 +15,10 @@ export type ScannedRoutes = {
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'events.store': { paramsTuple?: []; params?: {} }
+    'server_events.store': { paramsTuple?: []; params?: {} }
+    'website_server_keys.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_server_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'home': { paramsTuple?: []; params?: {} }
   }
   GET: {
@@ -24,6 +28,7 @@ export type ScannedRoutes = {
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_server_keys.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'home': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
@@ -33,6 +38,7 @@ export type ScannedRoutes = {
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_server_keys.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'home': { paramsTuple?: []; params?: {} }
   }
   POST: {
@@ -41,6 +47,11 @@ export type ScannedRoutes = {
     'session.destroy': { paramsTuple?: []; params?: {} }
     'websites.store': { paramsTuple?: []; params?: {} }
     'events.store': { paramsTuple?: []; params?: {} }
+    'server_events.store': { paramsTuple?: []; params?: {} }
+    'website_server_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+  }
+  DELETE: {
+    'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
 }
 declare module '@adonisjs/core/types/http' {

@@ -9,7 +9,7 @@ interface WebsiteReportHeaderProps {
 		timezone: string;
 	};
 	period: { startDate: string; endDate: string };
-	activeReport: 'traffic' | 'events';
+	activeReport: 'traffic' | 'events' | 'settings';
 	children?: ReactNode;
 }
 
@@ -37,6 +37,9 @@ export function WebsiteReportHeader({ website, period, activeReport, children }:
 				</ReportLink>
 				<ReportLink href={`/websites/${website.id}/events`} active={activeReport === 'events'}>
 					Events
+				</ReportLink>
+				<ReportLink href={`/websites/${website.id}/settings`} active={activeReport === 'settings'}>
+					Settings
 				</ReportLink>
 			</nav>
 		</>

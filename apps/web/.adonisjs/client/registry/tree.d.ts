@@ -23,5 +23,13 @@ export interface ApiDefinition {
   events: {
     store: typeof routes['events.store']
   }
+  serverEvents: {
+    store: typeof routes['server_events.store']
+  }
+  websiteServerKeys: {
+    index: typeof routes['website_server_keys.index']
+    store: typeof routes['website_server_keys.store']
+    destroy: typeof routes['website_server_keys.destroy']
+  }
   home: typeof routes['home']
 }

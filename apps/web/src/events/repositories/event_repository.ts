@@ -17,6 +17,13 @@ export interface BrowserEvent {
 	sessionId: string;
 }
 
+export interface ServerEvent {
+	name: string;
+	occurredAt: Date;
+	path: string;
+	properties: EventProperties;
+}
+
 @inject()
 export class EventRepository {
 	constructor(private readonly transactions: TransactionManager) {}
@@ -39,6 +46,28 @@ export class EventRepository {
 				properties: event.properties,
 				anonymous_id: event.anonymousId,
 				session_id: event.sessionId,
+			})
+			.execute();
+	}
+
+	async appendServerEvent(websiteId: string, event: ServerEvent) {
+		await this.transactions
+			.currentDatabase()
+			.insertInto('events')
+			.values({
+				id: randomUUID(),
+				website_id: websiteId,
+				name: event.name,
+				source: EventSource.Server,
+				occurred_at: event.occurredAt,
+				path: event.path,
+				properties: event.properties,
+				anonymous_id: null,
+				session_id: null,
+				referrer: null,
+				utm_source: null,
+				utm_medium: null,
+				utm_campaign: null,
 			})
 			.execute();
 	}

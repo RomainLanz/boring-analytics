@@ -29,7 +29,7 @@ const bodyParserConfig = defineConfig({
 	 */
 	json: {
 		/**
-		 * Every browser event must fit within this hard payload limit.
+		 * Every collected event must fit within this hard payload limit.
 		 */
 		limit: `${browserEventProtocol.maxPayloadBytes}b`,
 

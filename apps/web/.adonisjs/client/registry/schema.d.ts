@@ -139,6 +139,54 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_browser_event_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
+  'server_events.store': {
+    methods: ["POST"]
+    pattern: '/api/server/events'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#app/collection/controllers/record_server_event_controller').default)['validator']>>
+      paramsTuple: []
+      params: {}
+      query: ExtractQuery<InferInput<(typeof import('#app/collection/controllers/record_server_event_controller').default)['validator']>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/record_server_event_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_server_event_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'website_server_keys.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/:id/settings'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/server_event_settings_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/server_event_settings_controller').default['render']>>>
+    }
+  }
+  'website_server_keys.store': {
+    methods: ["POST"]
+    pattern: '/websites/:id/server-key'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/create_server_key_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/create_server_key_controller').default['execute']>>>
+    }
+  }
+  'website_server_keys.destroy': {
+    methods: ["DELETE"]
+    pattern: '/websites/:id/server-key'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/revoke_server_key_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/revoke_server_key_controller').default['execute']>>>
+    }
+  }
   'home': {
     methods: ["GET","HEAD"]
     pattern: '/'

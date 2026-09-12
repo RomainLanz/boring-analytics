@@ -59,6 +59,15 @@ export interface Websites {
   workspace_id: string;
 }
 
+export interface WebsiteServerKeys {
+  created_at: Generated<Timestamp>;
+  id: string;
+  prefix: string;
+  revoked_at: Timestamp | null;
+  secret_hash: string;
+  website_id: string;
+}
+
 export interface Workspaces {
   created_at: Generated<Timestamp>;
   id: string;
@@ -68,6 +77,7 @@ export interface Workspaces {
 export interface DB {
   events: Events;
   users: Users;
+  website_server_keys: WebsiteServerKeys;
   websites: Websites;
   workspaces: Workspaces;
 }

@@ -40,10 +40,11 @@ export default class InertiaMiddleware extends BaseInertiaMiddleware {
 		/**
 		 * Fetching the first error from the flash messages
 		 */
-		// SAFETY: This application only flashes strings under the `error` and `success` keys.
+		// SAFETY: These flash keys are written only with strings by application controllers.
 		return {
 			error: session?.flashMessages.get('error') as string | undefined,
 			success: session?.flashMessages.get('success') as string | undefined,
+			serverKeySecret: session?.flashMessages.get('serverKeySecret') as string | undefined,
 		};
 	}
 
