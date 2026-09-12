@@ -25,6 +25,7 @@ export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 export interface Events {
   anonymous_id: string | null;
+  distinct_id: string | null;
   id: string;
   name: string;
   occurred_at: Timestamp;
@@ -44,6 +45,7 @@ export interface Funnels {
   conversion_window_seconds: number;
   created_at: Generated<Timestamp>;
   id: string;
+  identity_kind: Generated<string>;
   name: string;
   updated_at: Generated<Timestamp>;
   website_id: string;
@@ -69,6 +71,7 @@ export interface Websites {
   allowed_domain: string;
   created_at: Generated<Timestamp>;
   id: string;
+  identity_mode: Generated<string>;
   name: string;
   timezone: Generated<string>;
   tracking_id: string;

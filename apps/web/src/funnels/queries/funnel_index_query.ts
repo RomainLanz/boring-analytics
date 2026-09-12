@@ -1,5 +1,6 @@
 import { inject } from '@adonisjs/core';
 import { sql } from 'kysely';
+import { parseFunnelIdentityKind, type FunnelIdentityKind } from '#funnels/domain/funnel_definition';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import { websiteReportPeriod } from '#websites/queries/website_report_period';
 
@@ -15,6 +16,7 @@ export interface FunnelIndex {
 		id: string;
 		name: string;
 		conversionWindowSeconds: number;
+		identityKind: FunnelIdentityKind;
 		stepCount: number;
 	}>;
 }
@@ -44,6 +46,7 @@ export class FunnelIndexQuery {
 				'funnels.id',
 				'funnels.name',
 				'funnels.conversion_window_seconds',
+				'funnels.identity_kind',
 				sql<number>`count(funnel_steps.position)::integer`.as('step_count'),
 			])
 			.where('funnels.website_id', '=', website.id)
@@ -64,6 +67,7 @@ export class FunnelIndexQuery {
 				id: funnel.id,
 				name: funnel.name,
 				conversionWindowSeconds: funnel.conversion_window_seconds,
+				identityKind: parseFunnelIdentityKind(funnel.identity_kind),
 				stepCount: funnel.step_count,
 			})),
 		};

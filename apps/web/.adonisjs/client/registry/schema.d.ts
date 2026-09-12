@@ -235,6 +235,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/server_event_settings_controller').default['render']>>>
     }
   }
+  'website_identity_mode.update': {
+    methods: ["PATCH"]
+    pattern: '/websites/:id/identity-mode'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#app/websites/controllers/update_website_identity_mode_controller').default)['validator']>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#app/websites/controllers/update_website_identity_mode_controller').default)['validator']>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/update_website_identity_mode_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/update_website_identity_mode_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
   'website_server_keys.store': {
     methods: ["POST"]
     pattern: '/websites/:id/server-key'

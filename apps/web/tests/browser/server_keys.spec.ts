@@ -10,6 +10,43 @@ test.group('Website server key settings', (group) => {
 		await db.deleteFrom('users').execute();
 	});
 
+	test('lets the owner explicitly change identity mode and updates the integration guidance', async ({
+		assert,
+		browserContext,
+		visit,
+	}) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id);
+		await browserContext.loginAs(owner);
+		const page = await visit(`/websites/${website.id}/settings`);
+		const anonymous = page.getByRole('radio', { name: /Anonymous/u });
+		const product = page.getByRole('radio', { name: /Product/u });
+
+		assert.isTrue(await anonymous.isChecked());
+		assert.notInclude((await page.locator('pre code').textContent()) ?? '', '"distinctId": "opaque-account-42"');
+
+		await product.check();
+		assert.isTrue(await product.isChecked());
+		await page.getByText('New browser and server events must include', { exact: false }).waitFor();
+		await Promise.all([
+			page.waitForResponse((response) => response.request().method() === 'PATCH'),
+			page.getByRole('button', { name: 'Save identity mode' }).click(),
+		]);
+		await page.waitForFunction(() =>
+			document.querySelector('pre code')?.textContent?.includes('"distinctId": "opaque-account-42"'),
+		);
+		assert.isTrue(await product.isChecked());
+		assert.equal(
+			(await db.selectFrom('websites').select('identity_mode').where('id', '=', website.id).executeTakeFirstOrThrow())
+				.identity_mode,
+			'product',
+		);
+
+		await anonymous.check();
+		assert.isTrue(await anonymous.isChecked());
+		await page.getByText('New events must omit Product identity', { exact: false }).waitFor();
+	});
+
 	test('reveals a new secret once, keeps its metadata, and revokes it inside the owner Website', async ({
 		assert,
 		browserContext,

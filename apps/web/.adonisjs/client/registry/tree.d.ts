@@ -39,5 +39,8 @@ export interface ApiDefinition {
     store: typeof routes['website_server_keys.store']
     destroy: typeof routes['website_server_keys.destroy']
   }
+  websiteIdentityMode: {
+    update: typeof routes['website_identity_mode.update']
+  }
   home: typeof routes['home']
 }

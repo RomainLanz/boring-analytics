@@ -34,6 +34,10 @@ export function FunnelForm({
 	const nextId = Math.max(...steps.map((step) => step.id), 0) + 1;
 	const stepErrors = Object.entries(errors).filter(([field]) => field === 'steps' || field.startsWith('steps.'));
 	const conversionWindow = editor.funnel?.conversionWindowSeconds ?? 1_800;
+	const identityKind =
+		editor.funnel?.identityKind ?? (editor.website.identityMode === 'product' ? 'distinct_id' : 'session_id');
+	const conversionWindows =
+		identityKind === 'distinct_id' ? [300, 900, 1_800, 3_600, 86_400, 7 * 86_400, 30 * 86_400] : [300, 900, 1_800];
 
 	function updateStep(id: number, values: Partial<FormStep>) {
 		setSteps((current) => current.map((step) => (step.id === id ? { ...step, ...values } : step)));
@@ -256,38 +260,50 @@ export function FunnelForm({
 				</div>
 			</Card>
 
-			<Card padding="none" className="self-start overflow-hidden">
-				<header className="border-border border-b px-5 py-4">
-					<h2 className="text-ink text-sm font-semibold">Counting</h2>
-				</header>
-				<div className="space-y-5 p-5">
-					<div>
-						<span className="text-muted text-xs font-semibold tracking-wide uppercase">Identity</span>
-						<div className="border-accent bg-accent-soft rounded-control mt-2 border px-3 py-3">
-							<strong className="text-ink block text-sm">Anonymous sessions</strong>
-							<span className="text-muted text-xs">Counted by session_id</span>
+			<aside className="self-start" aria-labelledby="counting-title">
+				<Card padding="none" className="overflow-hidden">
+					<header className="border-border border-b px-5 py-4">
+						<h2 id="counting-title" className="text-ink text-sm font-semibold">
+							Counting
+						</h2>
+					</header>
+					<div className="space-y-5 p-5">
+						<div>
+							<span className="text-muted text-xs font-semibold tracking-wide uppercase">Identity</span>
+							<div className="border-accent bg-accent-soft rounded-control mt-2 border px-3 py-3">
+								<strong className="text-ink block text-sm">
+									{identityKind === 'distinct_id' ? 'Product users' : 'Anonymous sessions'}
+								</strong>
+								<span className="text-muted mt-1 block text-xs leading-5">
+									{identityKind === 'distinct_id'
+										? 'Each distinct_id counts once across browser and server events.'
+										: 'Each session_id counts once inside its 30-minute session.'}
+								</span>
+							</div>
 						</div>
+						<label className="space-y-2">
+							<span className="text-ink block text-sm font-semibold">Conversion window</span>
+							<select
+								name="conversionWindowSeconds"
+								defaultValue={conversionWindow}
+								className="border-border bg-surface text-ink rounded-control h-11 w-full border px-3.5 text-sm"
+							>
+								{!conversionWindows.includes(conversionWindow) ? (
+									<option value={conversionWindow}>{formatWindow(conversionWindow)}</option>
+								) : null}
+								{conversionWindows.map((seconds) => (
+									<option key={seconds} value={seconds}>
+										{formatWindow(seconds)}
+									</option>
+								))}
+							</select>
+						</label>
+						<Button type="submit" size="large" loading={processing} className="w-full">
+							{processing ? 'Saving…' : submitLabel}
+						</Button>
 					</div>
-					<label className="space-y-2">
-						<span className="text-ink block text-sm font-semibold">Conversion window</span>
-						<select
-							name="conversionWindowSeconds"
-							defaultValue={conversionWindow}
-							className="border-border bg-surface text-ink rounded-control h-11 w-full border px-3.5 text-sm"
-						>
-							{![300, 900, 1_800].includes(conversionWindow) ? (
-								<option value={conversionWindow}>{formatWindow(conversionWindow)}</option>
-							) : null}
-							<option value="300">5 minutes</option>
-							<option value="900">15 minutes</option>
-							<option value="1800">30 minutes</option>
-						</select>
-					</label>
-					<Button type="submit" size="large" loading={processing} className="w-full">
-						{processing ? 'Saving…' : submitLabel}
-					</Button>
-				</div>
-			</Card>
+				</Card>
+			</aside>
 		</div>
 	);
 }
@@ -331,5 +347,14 @@ function propertyValueType(value: string | number | boolean | null): FormStep['f
 }
 
 function formatWindow(seconds: number) {
-	return seconds < 60 ? `${seconds} seconds` : `${seconds / 60} minutes`;
+	if (seconds < 3_600) {
+		return `${seconds / 60} minutes`;
+	}
+
+	if (seconds < 86_400) {
+		return `${seconds / 3_600} hour${seconds === 3_600 ? '' : 's'}`;
+	}
+
+	const days = seconds / 86_400;
+	return `${days} day${days === 1 ? '' : 's'}`;
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { inject } from '@adonisjs/core';
 import { TransactionManager } from '#shared/services/transaction_manager';
+import { parseWebsiteIdentityMode, type WebsiteIdentityMode } from '#websites/website_identity_mode';
 
 export interface ServerKeyMetadata {
 	id: string;
@@ -13,6 +14,7 @@ export interface ServerKeyAuthenticationTarget {
 	id: string;
 	websiteId: string;
 	secretHash: string;
+	identityMode: WebsiteIdentityMode;
 }
 
 @inject()
@@ -48,12 +50,25 @@ export class ServerKeyRepository {
 		const key = await this.transactions
 			.currentDatabase()
 			.selectFrom('website_server_keys')
-			.select(['id', 'website_id', 'secret_hash'])
+			.innerJoin('websites', 'websites.id', 'website_server_keys.website_id')
+			.select([
+				'website_server_keys.id',
+				'website_server_keys.website_id',
+				'website_server_keys.secret_hash',
+				'websites.identity_mode',
+			])
 			.where('prefix', '=', prefix)
 			.where('revoked_at', 'is', null)
 			.executeTakeFirst();
 
-		return key ? { id: key.id, websiteId: key.website_id, secretHash: key.secret_hash } : null;
+		return key
+			? {
+					id: key.id,
+					websiteId: key.website_id,
+					secretHash: key.secret_hash,
+					identityMode: parseWebsiteIdentityMode(key.identity_mode),
+				}
+			: null;
 	}
 
 	async create(websiteId: string, prefix: string, secretHash: string): Promise<ServerKeyMetadata | null> {

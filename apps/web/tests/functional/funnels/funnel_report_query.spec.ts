@@ -48,7 +48,6 @@ test.group('Funnel report query', (group) => {
 				event(websiteId, 'session-open', 'checkout_started', '2026-03-30T11:47:00.000Z', { plan: 'pro' }),
 			])
 			.execute();
-
 		const query = await app.container.make(FunnelReportQuery);
 		const report = await query.execute(funnelId, websiteId, ownerUserId, new Date('2026-03-30T12:00:00.000Z'));
 
@@ -141,9 +140,64 @@ test.group('Funnel report query', (group) => {
 		});
 		assert.isNull(await query.execute(funnelId, websiteId, randomUUID(), new Date('2026-03-30T12:00:00.000Z')));
 	});
+
+	test('counts each Product identity once across sessions inside a multi-day window', async ({ assert }) => {
+		const { ownerUserId, websiteId } = await createWebsite('product');
+		const funnelId = randomUUID();
+		await db
+			.insertInto('funnels')
+			.values({
+				id: funnelId,
+				website_id: websiteId,
+				name: 'Activation',
+				identity_kind: 'distinct_id',
+				conversion_window_seconds: 7 * 24 * 60 * 60,
+			})
+			.execute();
+		await db
+			.insertInto('funnel_steps')
+			.values([
+				{ funnel_id: funnelId, position: 1, event_name: 'signup', filter: null },
+				{ funnel_id: funnelId, position: 2, event_name: 'project_created', filter: null },
+				{ funnel_id: funnelId, position: 3, event_name: 'subscription_started', filter: null },
+			])
+			.execute();
+		await db
+			.insertInto('events')
+			.values([
+				productEvent(websiteId, 'product-a', 'signup', '2026-03-10T10:00:00.000Z'),
+				productEvent(websiteId, 'product-a', 'unrelated', '2026-03-11T10:00:00.000Z'),
+				productEvent(websiteId, 'product-a', 'project_created', '2026-03-12T10:00:00.000Z'),
+				productEvent(websiteId, 'product-a', 'signup', '2026-03-13T10:00:00.000Z'),
+				productEvent(websiteId, 'product-a', 'subscription_started', '2026-03-14T10:00:00.000Z'),
+				productEvent(websiteId, 'product-b', 'signup', '2026-03-15T10:00:00.000Z'),
+				productEvent(websiteId, 'product-b', 'project_created', '2026-03-16T10:00:00.000Z'),
+				productEvent(websiteId, 'inverted', 'project_created', '2026-03-17T10:00:00.000Z'),
+				productEvent(websiteId, 'inverted', 'signup', '2026-03-18T10:00:00.000Z'),
+				productEvent(websiteId, 'inverted', 'subscription_started', '2026-03-19T10:00:00.000Z'),
+				productEvent(websiteId, 'open-cohort', 'signup', '2026-03-25T10:00:00.000Z'),
+			])
+			.execute();
+		await db.updateTable('websites').set({ identity_mode: 'anonymous' }).where('id', '=', websiteId).execute();
+
+		const query = await app.container.make(FunnelReportQuery);
+		const report = await query.execute(funnelId, websiteId, ownerUserId, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.equal(report?.funnel.identityKind, 'distinct_id');
+		assert.deepEqual(
+			report?.steps.map(({ entrants }) => entrants),
+			[3, 2, 1],
+		);
+		assert.deepEqual(report?.summary, {
+			entrants: 3,
+			converted: 1,
+			conversionRate: 1 / 3,
+			totalDropoffs: 2,
+		});
+	});
 });
 
-async function createWebsite() {
+async function createWebsite(identityMode: 'anonymous' | 'product' = 'anonymous') {
 	const ownerUserId = randomUUID();
 	const workspaceId = randomUUID();
 	const websiteId = randomUUID();
@@ -167,6 +221,7 @@ async function createWebsite() {
 			tracking_id: randomUUID(),
 			allowed_domain: 'boring.money',
 			timezone: 'UTC',
+			identity_mode: identityMode,
 		})
 		.execute();
 	return { ownerUserId, websiteId };
@@ -189,5 +244,14 @@ function event(
 		properties,
 		anonymous_id: 'anonymous-id',
 		session_id: sessionId,
+	};
+}
+
+function productEvent(websiteId: string, distinctId: string, name: string, occurredAt: string) {
+	return {
+		...event(websiteId, 'unused-session', name, occurredAt),
+		anonymous_id: null,
+		session_id: null,
+		distinct_id: distinctId,
 	};
 }

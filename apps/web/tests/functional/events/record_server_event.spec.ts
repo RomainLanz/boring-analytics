@@ -52,6 +52,52 @@ test.group('POST /api/server/events', (group) => {
 		assert.isNull(event.utm_source);
 	});
 
+	test('persists reliable Product server events with distinct_id and no browser identity', async ({ assert }) => {
+		const { ownerUserId, websiteId } = await createWebsite('product');
+		const createServerKey = await app.container.make(CreateServerKey);
+		const created = await createServerKey.execute({ ownerUserId, websiteId });
+
+		if (!created.ok) {
+			throw new Error('The server key must be created');
+		}
+
+		const response = await postServerEvent(created.value.secret, {
+			...serverEventBody(),
+			distinctId: 'account_opaque_42',
+		});
+
+		assert.equal(response.status, 202);
+		const event = await db
+			.selectFrom('events')
+			.select(['distinct_id', 'anonymous_id', 'session_id'])
+			.executeTakeFirstOrThrow();
+		assert.deepEqual(event, { distinct_id: 'account_opaque_42', anonymous_id: null, session_id: null });
+	});
+
+	test('enforces the Website identity contract after authenticating server events', async ({ assert }) => {
+		const product = await createWebsite('product');
+		const anonymous = await createWebsite();
+		const createServerKey = await app.container.make(CreateServerKey);
+		const productKey = await createServerKey.execute(product);
+		const anonymousKey = await createServerKey.execute(anonymous);
+
+		if (!productKey.ok || !anonymousKey.ok) {
+			throw new Error('The server keys must be created');
+		}
+
+		const missing = await postServerEvent(productKey.value.secret, serverEventBody());
+		const unexpected = await postServerEvent(anonymousKey.value.secret, {
+			...serverEventBody(),
+			distinctId: 'usr_opaque',
+		});
+
+		assert.equal(missing.status, 422);
+		assert.deepEqual(await missing.json(), { error: 'distinct_id_required' });
+		assert.equal(unexpected.status, 422);
+		assert.deepEqual(await unexpected.json(), { error: 'distinct_id_not_allowed' });
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
 	test('returns one stable authentication error for missing, malformed, incorrect, and revoked keys', async ({
 		assert,
 	}) => {
@@ -211,7 +257,7 @@ async function postServerEvent(secret: string, body: Record<string, unknown>, ip
 	});
 }
 
-async function createWebsite() {
+async function createWebsite(identityMode: 'anonymous' | 'product' = 'anonymous') {
 	const ownerUserId = randomUUID();
 	const workspaceId = randomUUID();
 	const websiteId = randomUUID();
@@ -235,6 +281,7 @@ async function createWebsite() {
 			name: 'Example',
 			tracking_id: randomUUID(),
 			allowed_domain: 'example.com',
+			identity_mode: identityMode,
 		})
 		.execute();
 

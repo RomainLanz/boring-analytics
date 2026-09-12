@@ -8,6 +8,7 @@ import {
 } from '#collection/browser_event_protocol';
 import { err, ok, type Result } from '#core/result';
 import type { JsonValue } from '#types/db';
+import type { WebsiteIdentityMode } from '#websites/website_identity_mode';
 
 export type FunnelFilter =
 	| { field: 'path'; value: string }
@@ -24,6 +25,25 @@ export interface FunnelDefinitionValue {
 	steps: FunnelStepDefinition[];
 }
 
+export const productFunnelMaxConversionWindowSeconds = 30 * 24 * 60 * 60;
+export type FunnelIdentityKind = 'session_id' | 'distinct_id';
+
+export function parseFunnelIdentityKind(value: string): FunnelIdentityKind {
+	if (value === 'session_id' || value === 'distinct_id') {
+		return value;
+	}
+
+	throw new Error(`Invalid Funnel identity kind persisted: ${value}`);
+}
+
+export function funnelIdentityKindForWebsiteMode(identityMode: WebsiteIdentityMode): FunnelIdentityKind {
+	return identityMode === 'product' ? 'distinct_id' : 'session_id';
+}
+
+export function funnelMaxConversionWindowSeconds(identityKind: FunnelIdentityKind) {
+	return identityKind === 'session_id' ? anonymousSessionDurationSeconds : productFunnelMaxConversionWindowSeconds;
+}
+
 interface InvalidFunnelDefinitionError {
 	type: 'invalid_funnel_definition';
 }
@@ -32,6 +52,7 @@ const MAX_FUNNEL_STEPS = 20;
 
 export function createFunnelDefinition(
 	input: FunnelDefinitionValue,
+	identityKind: FunnelIdentityKind = 'session_id',
 ): Result<FunnelDefinitionValue, InvalidFunnelDefinitionError> {
 	const name = input.name.trim();
 	const steps = input.steps.map((step) => ({ ...step }));
@@ -41,7 +62,7 @@ export function createFunnelDefinition(
 		name.length > 100 ||
 		!Number.isInteger(input.conversionWindowSeconds) ||
 		input.conversionWindowSeconds < 1 ||
-		input.conversionWindowSeconds > anonymousSessionDurationSeconds ||
+		input.conversionWindowSeconds > funnelMaxConversionWindowSeconds(identityKind) ||
 		steps.length < 2 ||
 		steps.length > MAX_FUNNEL_STEPS ||
 		steps.some((step) => !isValidEventName(step.eventName) || !isValidFilter(step.filter))

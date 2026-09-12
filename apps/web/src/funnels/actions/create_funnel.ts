@@ -16,14 +16,25 @@ export class CreateFunnel {
 	async execute(
 		params: FunnelDefinitionValue & { ownerUserId: string; websiteId: string },
 	): Promise<Result<{ id: string }, CreateFunnelError>> {
-		const definition = createFunnelDefinition(params);
-
-		if (!definition.ok) {
-			return definition;
-		}
-
 		return this.transactions.run(async () => {
-			const funnel = await this.funnels.createForOwner(params.ownerUserId, params.websiteId, definition.value);
+			const identityKind = await this.funnels.findIdentityKindForNewFunnel(params.ownerUserId, params.websiteId);
+
+			if (!identityKind) {
+				return err({ type: 'website_not_found' });
+			}
+
+			const definition = createFunnelDefinition(params, identityKind);
+
+			if (!definition.ok) {
+				return definition;
+			}
+
+			const funnel = await this.funnels.createForOwner(
+				params.ownerUserId,
+				params.websiteId,
+				definition.value,
+				identityKind,
+			);
 			return funnel ? ok(funnel) : err({ type: 'website_not_found' });
 		});
 	}

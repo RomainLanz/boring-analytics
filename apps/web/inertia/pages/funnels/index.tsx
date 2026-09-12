@@ -32,7 +32,9 @@ export default function FunnelIndex({ index }: PageProps) {
 										<span>
 											<strong className="text-ink block text-sm">{funnel.name}</strong>
 											<span className="text-muted mt-1 block text-xs">
-												{funnel.stepCount} steps · {formatWindow(funnel.conversionWindowSeconds)}
+												{funnel.stepCount} steps ·{' '}
+												{funnel.identityKind === 'distinct_id' ? 'Product users' : 'Anonymous sessions'} ·{' '}
+												{formatWindow(funnel.conversionWindowSeconds)}
 											</span>
 										</span>
 										<span className="text-accent text-sm font-semibold">View report →</span>
@@ -44,7 +46,7 @@ export default function FunnelIndex({ index }: PageProps) {
 						<div className="px-5 py-14 text-center">
 							<h3 className="text-ink text-base font-semibold">No Funnels yet</h3>
 							<p className="text-muted mx-auto mt-2 max-w-md text-sm">
-								Create a Funnel to measure how anonymous sessions move through ordered events.
+								Create a Funnel to measure how identities move through ordered events.
 							</p>
 							<Button asChild className="mt-5">
 								<Link href={`/websites/${index.website.id}/funnels/new`}>Create your first Funnel</Link>

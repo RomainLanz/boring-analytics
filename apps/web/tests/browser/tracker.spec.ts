@@ -12,6 +12,7 @@ let backForwardCacheRestorations = 0;
 const fixtureServer = createServer((request, response) => {
 	const url = new URL(request.url ?? '/', 'http://fixture');
 	const trackingId = url.searchParams.get('website');
+	const distinctId = url.searchParams.get('distinct_id');
 
 	if (url.pathname === '/back-forward-cache-restored') {
 		backForwardCacheRestorations++;
@@ -30,11 +31,11 @@ const fixtureServer = createServer((request, response) => {
 	}
 
 	response.end(
-		`<!doctype html><title>Tracked page</title><a id="navigate">Navigate</a><script data-website-id="${trackingId}" src="${trackerUrl}"></script>`,
+		`<!doctype html><title>Tracked page</title><a id="navigate">Navigate</a><script data-website-id="${trackingId}"${distinctId ? ` data-distinct-id="${distinctId}"` : ''} src="${trackerUrl}"></script>`,
 	);
 });
 
-async function createWebsite() {
+async function createWebsite(identityMode: 'anonymous' | 'product' = 'anonymous') {
 	const userId = randomUUID();
 	const workspaceId = randomUUID();
 	const websiteId = randomUUID();
@@ -59,6 +60,7 @@ async function createWebsite() {
 			name: 'Tracked Website',
 			tracking_id: trackingId,
 			allowed_domain: '127.0.0.1',
+			identity_mode: identityMode,
 		})
 		.execute();
 
@@ -193,6 +195,39 @@ test.group('Browser tracker', (group) => {
 		});
 		assert.equal(events[0]?.anonymous_id, events[1]?.anonymous_id);
 		assert.equal(events[0]?.session_id, events[1]?.session_id);
+	});
+
+	test('sends Product identity from the script and updates it for future events only', async ({
+		assert,
+		browserContext,
+	}) => {
+		const trackingId = await createWebsite('product');
+		const page = await browserContext.newPage();
+		const url = trackedPageUrl(trackingId, '/pricing', 'no-referrer');
+		url.searchParams.set('distinct_id', 'account_opaque_a');
+
+		await page.goto(url.href);
+		await waitForEvents(1);
+		const updated = await page.evaluate(() => window.boringAnalytics?.setDistinctId('account_opaque_b'));
+		const rejected = await page.evaluate(
+			(limit) => [
+				window.boringAnalytics?.setDistinctId(''),
+				window.boringAnalytics?.setDistinctId('x'.repeat(limit + 1)),
+				window.boringAnalytics?.setDistinctId({ id: 'opaque' } as never),
+			],
+			browserEventProtocol.maxDistinctIdLength,
+		);
+		const tracked = await page.evaluate(() => window.boringAnalytics?.track('checkout_started'));
+		await waitForEvents(2);
+
+		assert.isTrue(updated);
+		assert.deepEqual(rejected, [false, false, false]);
+		assert.isTrue(tracked);
+		const events = await db.selectFrom('events').select(['distinct_id', 'session_id']).orderBy('received_at').execute();
+		assert.deepEqual(events, [
+			{ distinct_id: 'account_opaque_a', session_id: null },
+			{ distinct_id: 'account_opaque_b', session_id: null },
+		]);
 	});
 
 	test('drops invalid and oversized custom events before transport', async ({ assert, browserContext }) => {

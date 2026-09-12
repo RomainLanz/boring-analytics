@@ -1,4 +1,5 @@
 import { inject } from '@adonisjs/core';
+import { validateEventIdentity, type EventIdentityError } from '#collection/event_identity';
 import { isAcceptableEventTime } from '#collection/event_time';
 import { EventRepository } from '#collection/repositories/event_repository';
 import { AnonymousIdentity } from '#collection/services/anonymous_identity';
@@ -13,6 +14,7 @@ interface BrowserEventContext {
 	occurredAt: Date;
 	ip: string;
 	userAgent: string;
+	distinctId?: string;
 }
 
 export type RecordBrowserEventParams = BrowserEventContext &
@@ -30,7 +32,8 @@ export type RecordBrowserEventParams = BrowserEventContext &
 type RecordBrowserEventError =
 	| { type: 'collection_forbidden' }
 	| { type: 'invalid_occurred_at' }
-	| { type: 'invalid_referrer' };
+	| { type: 'invalid_referrer' }
+	| EventIdentityError;
 
 function sanitizeReferrer(value: string | null): string | null | undefined {
 	if (value === null) {
@@ -77,12 +80,21 @@ export class RecordBrowserEvent {
 			return err({ type: 'invalid_referrer' });
 		}
 
-		const identity = this.anonymousIdentity.derive({
-			websiteId: target.id,
-			ip: params.ip,
-			userAgent: params.userAgent,
-			receivedAt,
-		});
+		const identity = validateEventIdentity(target.identityMode, params.distinctId);
+
+		if (!identity.ok) {
+			return identity;
+		}
+
+		const anonymousIdentity =
+			target.identityMode === 'anonymous'
+				? this.anonymousIdentity.derive({
+						websiteId: target.id,
+						ip: params.ip,
+						userAgent: params.userAgent,
+						receivedAt,
+					})
+				: null;
 
 		await this.events.appendBrowserEvent(target.id, {
 			name: params.type === 'pageview' ? '$pageview' : params.name,
@@ -93,8 +105,9 @@ export class RecordBrowserEvent {
 			utmMedium: params.type === 'pageview' ? params.utmMedium : null,
 			utmCampaign: params.type === 'pageview' ? params.utmCampaign : null,
 			properties: params.type === 'pageview' ? null : params.properties,
-			anonymousId: identity.anonymousId,
-			sessionId: identity.sessionId,
+			anonymousId: anonymousIdentity?.anonymousId ?? null,
+			sessionId: anonymousIdentity?.sessionId ?? null,
+			distinctId: identity.value,
 		});
 		return ok(undefined);
 	}

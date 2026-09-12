@@ -1,10 +1,10 @@
 import vine from '@vinejs/vine';
-import { anonymousSessionDurationSeconds } from '#collection/anonymous_identity_policy';
+import { productFunnelMaxConversionWindowSeconds } from '#funnels/domain/funnel_definition';
 import type { FunnelDefinitionValue, FunnelFilter } from '#funnels/domain/funnel_definition';
 
 export const funnelValidator = vine.create({
 	name: vine.string().trim().minLength(1).maxLength(100),
-	conversionWindowSeconds: vine.number().min(1).max(anonymousSessionDurationSeconds),
+	conversionWindowSeconds: vine.number().min(1).max(productFunnelMaxConversionWindowSeconds),
 	steps: vine
 		.array(
 			vine.object({

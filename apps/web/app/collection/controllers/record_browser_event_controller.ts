@@ -6,6 +6,7 @@ import {
 	browserEventPathPattern,
 	browserEventProtocol,
 	customEventNamePattern,
+	isValidDistinctId,
 	isValidEventProperties,
 } from '#collection/browser_event_protocol';
 import type { HttpContext } from '@adonisjs/core/http';
@@ -25,6 +26,7 @@ const commonFields = {
 	trackingId: vine.string().uuid({ version: [4] }),
 	occurredAt: vine.string().maxLength(64).regex(isoTimestampWithZone),
 	path: vine.string().minLength(1).maxLength(browserEventProtocol.maxPathLength).regex(browserEventPathPattern),
+	distinctId: vine.string().minLength(1).maxLength(browserEventProtocol.maxDistinctIdLength).optional(),
 };
 const pageviewFields = {
 	...commonFields,
@@ -41,12 +43,23 @@ const customEventFields = {
 		vine.unionOfTypes([vine.string(), vine.boolean({ strict: true }), vine.number({ strict: true }), vine.null()]),
 	),
 };
-const pageviewExpectedFields = Object.keys(pageviewFields).sort();
-const customEventExpectedFields = Object.keys(customEventFields).sort();
+const pageviewExpectedFields = Object.keys(pageviewFields).filter((field) => field !== 'distinctId');
+const customEventExpectedFields = Object.keys(customEventFields).filter((field) => field !== 'distinctId');
 
 function hasExactFields(body: Record<string, unknown>, expectedFields: string[]) {
-	const fields = Object.keys(body).sort();
-	return fields.length === expectedFields.length && fields.every((field, index) => field === expectedFields[index]);
+	const fields = Object.keys(body);
+	return (
+		expectedFields.every((field) => fields.includes(field)) &&
+		fields.every((field) => expectedFields.includes(field) || field === 'distinctId')
+	);
+}
+
+function isValidPayload(record: Record<string, unknown>, pageview: boolean, expectedFields: string[]) {
+	return (
+		hasExactFields(record, expectedFields) &&
+		(record.distinctId === undefined || isValidDistinctId(record.distinctId)) &&
+		(pageview || isValidEventProperties(record.properties))
+	);
 }
 
 @inject()
@@ -69,7 +82,7 @@ export default class RecordBrowserEventController {
 		const pageview = record.name === '$pageview';
 		const expectedFields = pageview ? pageviewExpectedFields : customEventExpectedFields;
 
-		if (!hasExactFields(record, expectedFields) || (!pageview && !isValidEventProperties(record.properties))) {
+		if (!isValidPayload(record, pageview, expectedFields)) {
 			return response.unprocessableEntity({
 				errors: [{ message: `The event payload must contain only ${expectedFields.join(', ')}` }],
 			});
@@ -99,6 +112,7 @@ export default class RecordBrowserEventController {
 			occurredAt: occurredAt.toJSDate(),
 			ip: request.ip(),
 			userAgent: request.header('user-agent') ?? '',
+			distinctId: event.distinctId,
 		};
 		const result =
 			'properties' in event

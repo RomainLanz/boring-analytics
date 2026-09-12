@@ -168,7 +168,7 @@ yarn workspace @boring-analytics/web db:fresh
 
 This command is destructive. It refuses to run in production unless `--force` is passed explicitly.
 
-## Anonymous browser tracking
+## Browser tracking
 
 Each Website page displays a self-contained `<script>` tag for the instance's `/tracker.js`. The tracker has no client
 framework dependency. It records the first page load and History API or `popstate` navigation, strips query strings and
@@ -180,7 +180,7 @@ Collection requests are limited to 4 KiB. For unusually long URLs, the tracker k
 referrer first, followed by campaign, medium, and source, until the request fits. It does not send paths longer than the
 2,048-character protocol limit.
 
-The server derives both anonymous identifiers from the Website ID, request IP, User-Agent, and
+Every Website starts in Anonymous Mode. The server derives both anonymous identifiers from the Website ID, request IP, User-Agent, and
 `ANONYMOUS_ID_SECRET`. It stores only the HMAC results. `anonymous_id` rotates at UTC day boundaries. `session_id`
 rotates in fixed 30-minute windows. This simple session model may split an active visit at a window boundary, but it
 keeps identity derivation stateless and leaves no persistent browser identifier. Changing the secret immediately breaks
@@ -217,9 +217,42 @@ or unpaired UTF-16 surrogates. Nested objects and arrays are rejected. The compl
 4 KiB collection limit. `track` returns `false` and sends nothing when its input violates these rules, exceeds the
 payload limit, or Do Not Track is enabled.
 
-Custom events use the same Origin checks, rate limits, timestamp tolerance, and rotating Anonymous Mode identity as
+Custom events use the same Origin checks, rate limits, timestamp tolerance, and Website identity contract as
 pageviews. The collector derives identity from the request IP and User-Agent, then persists only the HMAC identifiers.
 It never stores the raw IP or User-Agent.
+
+### Product Mode
+
+An owner can change a Website to Product Mode from Settings. Product Mode requires the integrating application to send
+an opaque pseudonymous `distinctId` with every browser and server event. Boring Analytics persists it as `distinct_id`.
+The value must be a non-empty string of at most 255 characters. Numbers, objects, arrays, NUL, and malformed UTF-16 are
+rejected. Boring Analytics does not accept separate name or email identity fields and does not inspect identifiers for
+personal data. The integrating application is responsible for generating a value that contains no direct personal data.
+
+Supply the identity needed by the automatic first pageview on the tracker script:
+
+```html
+<script
+	data-website-id="YOUR_WEBSITE_TRACKING_ID"
+	data-distinct-id="opaque-account-42"
+	src="https://YOUR_BORING_ANALYTICS_HOST/tracker.js"
+></script>
+```
+
+The existing custom-event API keeps the same shape. When a single-page application changes account, update the identity
+before sending later events:
+
+```js
+window.boringAnalytics?.setDistinctId('opaque-account-84');
+window.boringAnalytics?.track('checkout_started', { plan: 'pro' });
+```
+
+`setDistinctId` returns `false` and keeps the previous value when validation fails. It changes only future events. It
+does not identify, alias, or merge prior events. Switching a Website mode also leaves all historical events and Funnels
+unchanged. Anonymous events do not gain a Distinct ID, and Product events do not gain anonymous or session identity.
+
+`$identify`, retroactive Anonymous-to-Product merging, aliases, profiles, event attribution before identification,
+batching, and deduplication are deferred to later tracers.
 
 ### Server events
 
@@ -238,13 +271,15 @@ curl -X POST "$BORING_ANALYTICS_URL/api/server/events" \
 		"name": "invoice.paid",
 		"occurredAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
 		"path": "/billing",
-		"properties": { "amount": 49, "currency": "CHF" }
+		"properties": { "amount": 49, "currency": "CHF" },
+		"distinctId": "opaque-account-42"
 	}
 JSON
 ```
 
 The endpoint returns `202 Accepted` and records the event with a server source. It does not require an `Origin` header
-and does not create anonymous or session identity. Names, paths, properties, timestamps, the 4 KiB payload limit, and
+and does not create anonymous or session identity. Omit `distinctId` for an Anonymous Website; it is required for a
+Product Website. Names, paths, properties, timestamps, the 4 KiB payload limit, and
 JSON media type follow the browser custom-event contract above. Missing, malformed, incorrect, and revoked keys all
 return `401` with `{ "error": "invalid_server_key" }`.
 

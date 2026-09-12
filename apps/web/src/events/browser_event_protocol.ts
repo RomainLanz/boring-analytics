@@ -7,6 +7,7 @@ export const browserEventProtocol = {
 	maxReferrerLength: 2048,
 	maxUtmLength: 255,
 	maxNameLength: 64,
+	maxDistinctIdLength: 255,
 	maxProperties: 20,
 	maxPropertyKeyLength: 64,
 	maxPropertyStringLength: 255,
@@ -66,6 +67,15 @@ export function isValidEventProperties(properties: unknown): properties is Event
 						isValidEventPropertyString(value)))
 			);
 		})
+	);
+}
+
+export function isValidDistinctId(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		value.length >= 1 &&
+		value.length <= browserEventProtocol.maxDistinctIdLength &&
+		isValidEventPropertyString(value)
 	);
 }
 

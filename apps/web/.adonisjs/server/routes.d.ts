@@ -23,6 +23,7 @@ export type ScannedRoutes = {
     'events.store': { paramsTuple?: []; params?: {} }
     'server_events.store': { paramsTuple?: []; params?: {} }
     'website_server_keys.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_identity_mode.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_server_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'home': { paramsTuple?: []; params?: {} }
@@ -67,6 +68,9 @@ export type ScannedRoutes = {
   }
   PUT: {
     'funnels.update': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
+  }
+  PATCH: {
+    'website_identity_mode.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   DELETE: {
     'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

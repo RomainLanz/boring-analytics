@@ -1,14 +1,53 @@
 import { randomUUID } from 'node:crypto';
 import { inject } from '@adonisjs/core';
+import {
+	funnelIdentityKindForWebsiteMode,
+	parseFunnelIdentityKind,
+	type FunnelDefinitionValue,
+	type FunnelIdentityKind,
+} from '#funnels/domain/funnel_definition';
 import { TransactionManager } from '#shared/services/transaction_manager';
-import type { FunnelDefinitionValue } from '#funnels/domain/funnel_definition';
+import { parseWebsiteIdentityMode } from '#websites/website_identity_mode';
 import type { JsonObject } from '#types/db';
 
 @inject()
 export class FunnelRepository {
 	constructor(private readonly transactions: TransactionManager) {}
 
-	async createForOwner(ownerUserId: string, websiteId: string, definition: FunnelDefinitionValue) {
+	async findIdentityKindForNewFunnel(ownerUserId: string, websiteId: string) {
+		const website = await this.transactions
+			.currentDatabase()
+			.selectFrom('websites')
+			.innerJoin('workspaces', 'workspaces.id', 'websites.workspace_id')
+			.select('websites.identity_mode')
+			.where('websites.id', '=', websiteId)
+			.where('workspaces.owner_user_id', '=', ownerUserId)
+			.executeTakeFirst();
+
+		return website ? funnelIdentityKindForWebsiteMode(parseWebsiteIdentityMode(website.identity_mode)) : null;
+	}
+
+	async findIdentityKindForExistingFunnel(ownerUserId: string, websiteId: string, funnelId: string) {
+		const funnel = await this.transactions
+			.currentDatabase()
+			.selectFrom('funnels')
+			.innerJoin('websites', 'websites.id', 'funnels.website_id')
+			.innerJoin('workspaces', 'workspaces.id', 'websites.workspace_id')
+			.select('funnels.identity_kind')
+			.where('funnels.id', '=', funnelId)
+			.where('websites.id', '=', websiteId)
+			.where('workspaces.owner_user_id', '=', ownerUserId)
+			.executeTakeFirst();
+
+		return funnel ? parseFunnelIdentityKind(funnel.identity_kind) : null;
+	}
+
+	async createForOwner(
+		ownerUserId: string,
+		websiteId: string,
+		definition: FunnelDefinitionValue,
+		identityKind: FunnelIdentityKind,
+	) {
 		const website = await this.#findOwnedWebsite(ownerUserId, websiteId);
 
 		if (!website) {
@@ -24,6 +63,7 @@ export class FunnelRepository {
 				website_id: website.id,
 				name: definition.name,
 				conversion_window_seconds: definition.conversionWindowSeconds,
+				identity_kind: identityKind,
 			})
 			.execute();
 		await this.#insertSteps(funnelId, definition);

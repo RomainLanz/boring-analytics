@@ -3,6 +3,7 @@
 import {
 	browserEventProtocol,
 	customEventNamePattern,
+	isValidDistinctId,
 	isValidEventProperties,
 	normalizeBrowserEventPath,
 } from '#collection/browser_event_protocol';
@@ -12,6 +13,7 @@ declare global {
 	interface Window {
 		boringAnalytics?: {
 			track(name: string, properties?: EventProperties): boolean;
+			setDistinctId(distinctId: string): boolean;
 		};
 	}
 }
@@ -28,6 +30,7 @@ if (script && trackingId) {
 	const endpoint = new URL('/api/events', script.src).href;
 	let previousUrl = window.location.href;
 	let referrer = withoutQueryOrFragment(document.referrer);
+	let distinctId = isValidDistinctId(script.dataset.distinctId) ? script.dataset.distinctId : undefined;
 
 	function withoutQueryOrFragment(value: string) {
 		if (!value) {
@@ -93,6 +96,7 @@ if (script && trackingId) {
 
 		return send({
 			trackingId,
+			distinctId,
 			name,
 			occurredAt: new Date().toISOString(),
 			path,
@@ -111,6 +115,7 @@ if (script && trackingId) {
 
 		const event = {
 			trackingId,
+			distinctId,
 			name: '$pageview',
 			occurredAt: new Date().toISOString(),
 			path,
@@ -141,6 +146,15 @@ if (script && trackingId) {
 		collectPageview();
 	}
 
+	function setDistinctId(value: string) {
+		if (!isValidDistinctId(value)) {
+			return false;
+		}
+
+		distinctId = value;
+		return true;
+	}
+
 	for (const method of ['pushState', 'replaceState'] as const) {
 		const original = history[method];
 		history[method] = function (...args) {
@@ -156,6 +170,6 @@ if (script && trackingId) {
 			collectPageview();
 		}
 	});
-	window.boringAnalytics = { track: collectCustomEvent };
+	window.boringAnalytics = { track: collectCustomEvent, setDistinctId };
 	collectPageview();
 }

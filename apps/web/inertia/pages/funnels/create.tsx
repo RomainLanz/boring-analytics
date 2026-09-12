@@ -16,7 +16,7 @@ export default function CreateFunnel({ editor }: PageProps) {
 				<header className="mb-5">
 					<h2 className="text-ink text-xl font-bold tracking-tight">Create a Funnel</h2>
 					<p className="text-muted mt-1 text-sm">
-						Define the ordered events a session must reach inside the conversion window.
+						Define the ordered events an identity must reach inside the conversion window.
 					</p>
 				</header>
 				<Form route="funnels.store" routeParams={{ id: editor.website.id }}>

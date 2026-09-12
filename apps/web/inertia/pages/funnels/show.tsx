@@ -9,6 +9,8 @@ type PageProps = InertiaProps<{ report: Data.Funnels.FunnelReport }>;
 
 export default function FunnelReport({ report }: PageProps) {
 	const maximum = report.steps[0]?.entrants ?? 0;
+	const identityLabel = report.funnel.identityKind === 'distinct_id' ? 'Product users' : 'Anonymous sessions';
+	const identityUnit = report.funnel.identityKind === 'distinct_id' ? 'Users' : 'Sessions';
 
 	return (
 		<>
@@ -24,7 +26,7 @@ export default function FunnelReport({ report }: PageProps) {
 						<div>
 							<h2 className="text-ink text-base font-bold">{report.funnel.name}</h2>
 							<p className="text-muted mt-0.5 text-xs">
-								Anonymous sessions · {formatWindow(report.funnel.conversionWindowSeconds)}
+								{identityLabel} · {formatWindow(report.funnel.conversionWindowSeconds)}
 							</p>
 						</div>
 						<span className="bg-accent-soft text-accent w-fit rounded-full px-2.5 py-1 text-xs font-semibold">
@@ -32,14 +34,14 @@ export default function FunnelReport({ report }: PageProps) {
 						</span>
 					</header>
 					<section className="border-border grid grid-cols-2 border-b lg:grid-cols-4" aria-label="Funnel summary">
-						<Metric label="Entrants" value={formatNumber(report.summary.entrants)} detail="Sessions" />
-						<Metric label="Converted" value={formatNumber(report.summary.converted)} detail="Sessions" />
+						<Metric label="Entrants" value={formatNumber(report.summary.entrants)} detail={identityUnit} />
+						<Metric label="Converted" value={formatNumber(report.summary.converted)} detail={identityUnit} />
 						<Metric label="Conversion" value={formatPercent(report.summary.conversionRate)} detail="Overall" />
-						<Metric label="Drop-offs" value={formatNumber(report.summary.totalDropoffs)} detail="Sessions" />
+						<Metric label="Drop-offs" value={formatNumber(report.summary.totalDropoffs)} detail={identityUnit} />
 					</section>
 					{maximum === 0 ? (
 						<p className="border-border bg-surface-muted text-muted border-b px-5 py-4 text-sm">
-							No mature sessions entered this Funnel during this period.
+							No mature {identityLabel.toLowerCase()} entered this Funnel during this period.
 						</p>
 					) : null}
 					<div className="p-4 sm:p-6">
@@ -128,13 +130,27 @@ function formatDuration(seconds: number | null) {
 		return 'Start';
 	}
 
-	if (seconds < 60) {
-		return `${Math.round(seconds)}s`;
+	const rounded = Math.round(seconds);
+
+	if (rounded < 60) {
+		return `${rounded}s`;
 	}
 
-	const minutes = Math.floor(seconds / 60);
-	const remaining = Math.round(seconds % 60);
-	return remaining ? `${minutes}m ${remaining}s` : `${minutes}m`;
+	if (rounded < 3_600) {
+		const minutes = Math.floor(rounded / 60);
+		const remainingSeconds = rounded % 60;
+		return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+	}
+
+	if (rounded < 86_400) {
+		const hours = Math.floor(rounded / 3_600);
+		const remainingMinutes = Math.floor((rounded % 3_600) / 60);
+		return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+	}
+
+	const days = Math.floor(rounded / 86_400);
+	const remainingHours = Math.floor((rounded % 86_400) / 3_600);
+	return remainingHours ? `${days}d ${remainingHours}h` : `${days}d`;
 }
 
 function formatFilter(filter: Data.Funnels.FunnelReport['steps'][number]['filter']) {

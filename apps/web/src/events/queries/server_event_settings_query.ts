@@ -1,6 +1,7 @@
 import { inject } from '@adonisjs/core';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import { websiteReportPeriod } from '#websites/queries/website_report_period';
+import { parseWebsiteIdentityMode, type WebsiteIdentityMode } from '#websites/website_identity_mode';
 import type { ServerKeyMetadata } from '#collection/repositories/server_key_repository';
 
 export interface ServerEventSettings {
@@ -9,6 +10,7 @@ export interface ServerEventSettings {
 		name: string;
 		allowedDomain: string;
 		timezone: string;
+		identityMode: WebsiteIdentityMode;
 	};
 	period: { startDate: string; endDate: string };
 	serverKey: ServerKeyMetadata | null;
@@ -23,7 +25,13 @@ export class ServerEventSettingsQuery {
 		const website = await database
 			.selectFrom('websites')
 			.innerJoin('workspaces', 'workspaces.id', 'websites.workspace_id')
-			.select(['websites.id', 'websites.name', 'websites.allowed_domain', 'websites.timezone'])
+			.select([
+				'websites.id',
+				'websites.name',
+				'websites.allowed_domain',
+				'websites.timezone',
+				'websites.identity_mode',
+			])
 			.where('websites.id', '=', websiteId)
 			.where('workspaces.owner_user_id', '=', ownerUserId)
 			.executeTakeFirst();
@@ -46,6 +54,7 @@ export class ServerEventSettingsQuery {
 				name: website.name,
 				allowedDomain: website.allowed_domain,
 				timezone: website.timezone,
+				identityMode: parseWebsiteIdentityMode(website.identity_mode),
 			},
 			period: { startDate, endDate },
 			serverKey: key ? { id: key.id, prefix: key.prefix, createdAt: key.created_at, revokedAt: key.revoked_at } : null,

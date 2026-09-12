@@ -8,7 +8,7 @@ import { collectionLimits } from '#start/limiter';
 
 const endpoint = 'http://localhost:3333/api/events';
 
-async function createWebsite(allowedDomain = 'example.com') {
+async function createWebsite(allowedDomain = 'example.com', identityMode: 'anonymous' | 'product' = 'anonymous') {
 	const userId = randomUUID();
 	const workspaceId = randomUUID();
 	const websiteId = randomUUID();
@@ -27,6 +27,7 @@ async function createWebsite(allowedDomain = 'example.com') {
 			name: 'Example',
 			tracking_id: trackingId,
 			allowed_domain: allowedDomain,
+			identity_mode: identityMode,
 		})
 		.execute();
 
@@ -178,6 +179,68 @@ test.group('POST /api/events', (group) => {
 		assert.match(event.session_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
 		assert.notProperty(event, 'ip');
 		assert.notProperty(event, 'user_agent');
+	});
+
+	test('requires and persists an opaque distinct_id for Product browser events', async ({ assert }) => {
+		const { websiteId, trackingId } = await createWebsite('example.com', 'product');
+		const distinctId = 'usr_01J8ZV7Y7J6QJ9M8X2P4';
+
+		const response = await postCustomEvent(trackingId, { distinctId });
+
+		assert.equal(response.status, 202);
+		const event = await db
+			.selectFrom('events')
+			.select(['website_id', 'distinct_id', 'anonymous_id', 'session_id'])
+			.executeTakeFirstOrThrow();
+		assert.deepEqual(event, {
+			website_id: websiteId,
+			distinct_id: distinctId,
+			anonymous_id: null,
+			session_id: null,
+		});
+	});
+
+	test('rejects missing Product identity and identity sent to an Anonymous Website', async ({ assert }) => {
+		const product = await createWebsite('example.com', 'product');
+		const anonymous = await createWebsite();
+
+		const missing = await postCustomEvent(product.trackingId, {});
+		const unexpected = await postCustomEvent(anonymous.trackingId, { distinctId: 'usr_opaque' });
+
+		assert.equal(missing.status, 422);
+		assert.deepEqual(await missing.json(), { error: 'distinct_id_required' });
+		assert.equal(unexpected.status, 422);
+		assert.deepEqual(await unexpected.json(), { error: 'distinct_id_not_allowed' });
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
+	test('validates distinct_id as a non-empty string of at most 255 characters', async ({ assert }) => {
+		const { trackingId } = await createWebsite('example.com', 'product');
+
+		for (const distinctId of ['', 'x'.repeat(browserEventProtocol.maxDistinctIdLength + 1), 42, { id: 'opaque' }]) {
+			const response = await postCustomEvent(trackingId, { distinctId });
+			assert.equal(response.status, 422, JSON.stringify(distinctId));
+		}
+
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
+	test('keeps historical Anonymous identity separate after switching to Product Mode', async ({ assert }) => {
+		const { websiteId, trackingId } = await createWebsite();
+		assert.equal((await postCustomEvent(trackingId, {})).status, 202);
+		await db.updateTable('websites').set({ identity_mode: 'product' }).where('id', '=', websiteId).execute();
+
+		assert.equal((await postCustomEvent(trackingId, { distinctId: 'usr_after_switch' })).status, 202);
+
+		const events = await db
+			.selectFrom('events')
+			.select(['anonymous_id', 'session_id', 'distinct_id'])
+			.orderBy('received_at')
+			.execute();
+		assert.isNotNull(events[0]?.anonymous_id);
+		assert.isNotNull(events[0]?.session_id);
+		assert.isNull(events[0]?.distinct_id);
+		assert.deepEqual(events[1], { anonymous_id: null, session_id: null, distinct_id: 'usr_after_switch' });
 	});
 
 	test('rejects an origin outside the Website allowlist', async ({ assert }) => {

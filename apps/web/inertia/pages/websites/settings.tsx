@@ -15,6 +15,7 @@ type PageProps = InertiaProps<{
 export default function WebsiteSettings({ settings, serverEventsUrl }: PageProps) {
 	const { flash } = usePage();
 	const [copiedSecret, setCopiedSecret] = useState<string>();
+	const [identityMode, setIdentityMode] = useState(settings.website.identityMode);
 	const curl = `curl -X POST "${serverEventsUrl}" \\
   -H "Authorization: Bearer $BORING_ANALYTICS_SERVER_KEY" \\
   -H "Content-Type: application/json" \\
@@ -23,7 +24,7 @@ export default function WebsiteSettings({ settings, serverEventsUrl }: PageProps
     "name": "invoice.paid",
     "occurredAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "path": "/billing",
-    "properties": { "amount": 49 }
+    "properties": { "amount": 49 }${settings.website.identityMode === 'product' ? ',\n    "distinctId": "opaque-account-42"' : ''}
   }
 JSON`;
 
@@ -43,8 +44,60 @@ JSON`;
 				<WebsiteReportHeader website={settings.website} period={settings.period} activeReport="settings" />
 
 				<div className="max-w-3xl">
+					<section aria-labelledby="identity-mode-title">
+						<header className="mb-5">
+							<h2 id="identity-mode-title" className="text-ink text-xl font-bold tracking-tight">
+								Identity mode
+							</h2>
+							<p className="text-muted mt-1 text-sm">
+								Choose how this Website links events. Names, emails, and profiles are never inferred.
+							</p>
+						</header>
+
+						<Form route="website_identity_mode.update" routeParams={{ id: settings.website.id }}>
+							{({ processing }) => (
+								<Card padding="none" className="overflow-hidden">
+									<fieldset className="p-5">
+										<legend className="text-ink text-sm font-semibold">Event identity</legend>
+										<div className="mt-4 grid gap-3 sm:grid-cols-2">
+											<IdentityModeChoice
+												value="anonymous"
+												selected={identityMode === 'anonymous'}
+												onChange={() => setIdentityMode('anonymous')}
+												title="Anonymous"
+												description="Boring Analytics derives rotating visitor identity and 30-minute sessions."
+											/>
+											<IdentityModeChoice
+												value="product"
+												selected={identityMode === 'product'}
+												onChange={() => setIdentityMode('product')}
+												title="Product"
+												description="Your application sends one opaque distinct_id. Funnels can span sessions."
+											/>
+										</div>
+										<p className="border-accent bg-accent-soft text-muted rounded-control mt-4 border px-4 py-3 text-sm leading-6">
+											{identityMode === 'product' ? (
+												<>
+													New browser and server events must include <code className="text-ink">distinctId</code>.
+												</>
+											) : (
+												<>New events must omit Product identity and use 30-minute sessions.</>
+											)}{' '}
+											Historical events and existing Funnels stay unchanged.
+										</p>
+										<div className="mt-4 flex justify-end">
+											<Button type="submit" size="small" loading={processing}>
+												{processing ? 'Saving…' : 'Save identity mode'}
+											</Button>
+										</div>
+									</fieldset>
+								</Card>
+							)}
+						</Form>
+					</section>
+
 					<header className="mb-5">
-						<h2 className="text-ink text-xl font-bold tracking-tight">Server events</h2>
+						<h2 className="text-ink mt-10 text-xl font-bold tracking-tight">Server events</h2>
 						<p className="text-muted mt-1 text-sm">
 							Send custom events from your backend with one secret key scoped to this Website.
 						</p>
@@ -131,6 +184,42 @@ JSON`;
 				</div>
 			</main>
 		</>
+	);
+}
+
+function IdentityModeChoice({
+	value,
+	selected,
+	onChange,
+	title,
+	description,
+}: {
+	value: 'anonymous' | 'product';
+	selected: boolean;
+	onChange: () => void;
+	title: string;
+	description: string;
+}) {
+	return (
+		<label
+			aria-label={title}
+			className={`rounded-control focus-within:ring-accent cursor-pointer border p-4 focus-within:ring-2 focus-within:ring-offset-2 ${selected ? 'border-accent bg-accent-soft' : 'border-border bg-surface'}`}
+		>
+			<span className="flex items-start justify-between gap-3">
+				<span>
+					<strong className="text-ink block text-sm">{title}</strong>
+					<span className="text-muted mt-1.5 block text-sm leading-5">{description}</span>
+				</span>
+				<input
+					type="radio"
+					name="identityMode"
+					value={value}
+					checked={selected}
+					onChange={onChange}
+					className="accent-accent mt-0.5 size-4 shrink-0"
+				/>
+			</span>
+		</label>
 	);
 }
 

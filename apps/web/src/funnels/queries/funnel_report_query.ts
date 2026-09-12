@@ -1,6 +1,11 @@
 import { inject } from '@adonisjs/core';
 import { sql } from 'kysely';
-import { parseFunnelFilter, type FunnelFilter } from '#funnels/domain/funnel_definition';
+import {
+	parseFunnelFilter,
+	parseFunnelIdentityKind,
+	type FunnelFilter,
+	type FunnelIdentityKind,
+} from '#funnels/domain/funnel_definition';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import { websiteReportPeriod } from '#websites/queries/website_report_period';
 import type { JsonValue } from '#types/db';
@@ -17,6 +22,7 @@ export interface FunnelReport {
 		id: string;
 		name: string;
 		conversionWindowSeconds: number;
+		identityKind: FunnelIdentityKind;
 	};
 	summary: {
 		entrants: number;
@@ -66,6 +72,7 @@ export class FunnelReportQuery {
 				'funnels.id',
 				'funnels.name as funnel_name',
 				'funnels.conversion_window_seconds',
+				'funnels.identity_kind',
 				'websites.id as website_id',
 				'websites.name as website_name',
 				'websites.allowed_domain',
@@ -96,6 +103,8 @@ export class FunnelReportQuery {
 		}
 
 		const persistedSteps = funnel.persisted_steps;
+		const identityKind = parseFunnelIdentityKind(funnel.identity_kind);
+		const identityColumn = sql.ref(`events.${identityKind}`);
 		const { startDate, endDate, periodStart, periodEnd } = websiteReportPeriod(funnel.website_id, funnel.timezone, now);
 		const matureBefore = new Date(periodEnd.getTime() - funnel.conversion_window_seconds * 1_000);
 		const capturedSteps = sql.join(
@@ -109,25 +118,25 @@ export class FunnelReportQuery {
 				values ${capturedSteps}
 			), seed_candidates as (
 				select
-					events.session_id,
+					${identityColumn} as identity_id,
 					events.id,
 					events.occurred_at,
 					events.received_at,
 					row_number() over (
-						partition by events.session_id
+						partition by ${identityColumn}
 						order by events.occurred_at, events.received_at, events.id
 					) as candidate_number
 				from events
 				inner join steps on steps.position = 1 and steps.event_name = events.name
 				where events.website_id = ${funnel.website_id}
-					and events.session_id is not null
+					and ${identityColumn} is not null
 					and events.occurred_at >= ${periodStart}
 					and events.occurred_at < ${periodEnd}
 					and events.occurred_at <= ${matureBefore}
 					and ${this.#matchesFilter(sql.ref('steps.filter'), sql.ref('events'))}
 			), chain as (
 				select
-					seed.session_id,
+					seed.identity_id,
 					1::smallint as position,
 					seed.id,
 					seed.occurred_at,
@@ -140,7 +149,7 @@ export class FunnelReportQuery {
 				union all
 
 				select
-					chain.session_id,
+					chain.identity_id,
 					next_step.position,
 					next_event.id,
 					next_event.occurred_at,
@@ -153,7 +162,7 @@ export class FunnelReportQuery {
 					select events.id, events.occurred_at, events.received_at
 					from events
 					where events.website_id = ${funnel.website_id}
-						and events.session_id = chain.session_id
+						and ${identityColumn} = chain.identity_id
 						and events.name = next_step.event_name
 						and (events.occurred_at, events.received_at, events.id) >
 							(chain.occurred_at, chain.received_at, chain.id)
@@ -165,7 +174,7 @@ export class FunnelReportQuery {
 			)
 			select
 				steps.position::integer as position,
-				count(chain.session_id)::integer as entrants,
+				count(chain.identity_id)::integer as entrants,
 				percentile_cont(0.5) within group (
 					order by extract(epoch from chain.occurred_at - chain.previous_step_at)
 				)::double precision as median_time_from_previous_seconds
@@ -205,6 +214,7 @@ export class FunnelReportQuery {
 				id: funnel.id,
 				name: funnel.funnel_name,
 				conversionWindowSeconds: funnel.conversion_window_seconds,
+				identityKind,
 			},
 			summary: {
 				entrants,

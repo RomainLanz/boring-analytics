@@ -6,6 +6,7 @@ import {
 	browserEventPathPattern,
 	browserEventProtocol,
 	customEventNamePattern,
+	isValidDistinctId,
 	isValidEventProperties,
 } from '#collection/browser_event_protocol';
 import { ServerKeyAuthenticator } from '#collection/services/server_key_authenticator';
@@ -25,8 +26,9 @@ const fields = {
 	properties: vine.record(
 		vine.unionOfTypes([vine.string(), vine.boolean({ strict: true }), vine.number({ strict: true }), vine.null()]),
 	),
+	distinctId: vine.string().minLength(1).maxLength(browserEventProtocol.maxDistinctIdLength).optional(),
 };
-const expectedFields = Object.keys(fields).sort();
+const expectedFields = Object.keys(fields).filter((field) => field !== 'distinctId');
 
 @inject()
 export default class RecordServerEventController {
@@ -68,11 +70,12 @@ export default class RecordServerEventController {
 		}
 
 		const record = body as Record<string, unknown>;
-		const submittedFields = Object.keys(record).sort();
+		const submittedFields = Object.keys(record);
 
 		if (
-			submittedFields.length !== expectedFields.length ||
-			!submittedFields.every((field, index) => field === expectedFields[index]) ||
+			!expectedFields.every((field) => submittedFields.includes(field)) ||
+			!submittedFields.every((field) => expectedFields.includes(field) || field === 'distinctId') ||
+			(record.distinctId !== undefined && !isValidDistinctId(record.distinctId)) ||
 			!isValidEventProperties(record.properties)
 		) {
 			return response.unprocessableEntity({
@@ -89,6 +92,8 @@ export default class RecordServerEventController {
 
 		const result = await this.recordServerEvent.execute({
 			websiteId: key.websiteId,
+			identityMode: key.identityMode,
+			distinctId: event.distinctId,
 			name: event.name,
 			occurredAt: occurredAt.toJSDate(),
 			path: event.path,

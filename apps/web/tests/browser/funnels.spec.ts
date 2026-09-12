@@ -161,6 +161,63 @@ test.group('Funnels', (group) => {
 			[{ filter: { field: 'path', value: firstPath } }, { filter: { field: 'path', value: secondPath } }],
 		);
 	});
+
+	test('creates a multi-session Product Funnel and keeps its identity after the Website mode changes', async ({
+		assert,
+		browserContext,
+		visit,
+	}) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id);
+		await db.updateTable('websites').set('identity_mode', 'product').where('id', '=', website.id).execute();
+		await db
+			.insertInto('events')
+			.values([
+				productEvent(website.id, 'account-a', 'signup', new Date(Date.now() - 8 * 60 * 60_000)),
+				productEvent(website.id, 'account-a', 'activated', new Date(Date.now() - 6 * 60 * 60_000)),
+			])
+			.execute();
+
+		await browserContext.loginAs(owner);
+		const page = await visit(`/websites/${website.id}/funnels/new`);
+		await page.getByText('Product users', { exact: true }).waitFor();
+		await page.getByText('Each distinct_id counts once across browser and server events.', { exact: true }).waitFor();
+		const conversionWindow = page.getByLabel('Conversion window');
+		assert.include(await conversionWindow.locator('option').allTextContents(), '30 days');
+		await page.getByLabel('Funnel name').fill('Product activation');
+		await page.getByLabel('Event').nth(0).fill('signup');
+		await page.getByLabel('Event').nth(1).fill('activated');
+		await conversionWindow.selectOption(String(7 * 24 * 60 * 60));
+		await page.getByRole('button', { name: 'Create Funnel' }).click();
+		await page.waitForURL(/\/websites\/[0-9a-f-]+\/funnels\/[0-9a-f-]+$/u);
+		await page.getByText('Product users · 7 day window', { exact: true }).waitFor();
+		await page.getByRole('region', { name: 'Funnel summary' }).getByText('Users', { exact: true }).first().waitFor();
+
+		const funnelId = page.url().split('/').at(-1);
+
+		if (!funnelId) {
+			throw new Error('The Funnel id must be present in the report URL');
+		}
+
+		await db.updateTable('websites').set('identity_mode', 'anonymous').where('id', '=', website.id).execute();
+		await page.getByRole('link', { name: 'Edit Funnel' }).click();
+		await page.getByText('Product users', { exact: true }).waitFor();
+		assert.equal(await page.getByLabel('Conversion window').inputValue(), String(7 * 24 * 60 * 60));
+		await page.getByRole('button', { name: 'Save Funnel' }).click();
+		await page.waitForURL(new RegExp(`/funnels/${funnelId}$`, 'u'));
+		assert.deepEqual(
+			await db
+				.selectFrom('funnels')
+				.select(['identity_kind', 'conversion_window_seconds'])
+				.where('id', '=', funnelId)
+				.executeTakeFirstOrThrow(),
+			{ identity_kind: 'distinct_id', conversion_window_seconds: 7 * 24 * 60 * 60 },
+		);
+
+		await page.goto(new URL(`/websites/${website.id}/funnels/new`, page.url()).href);
+		await page.getByText('Anonymous sessions', { exact: true }).waitFor();
+		assert.notInclude(await page.getByLabel('Conversion window').locator('option').allTextContents(), '1 hour');
+	});
 });
 
 async function createUser(name: string, email: string) {
@@ -196,5 +253,18 @@ function event(websiteId: string, sessionId: string, name: string, occurredAt: D
 		properties: null,
 		anonymous_id: sessionId,
 		session_id: sessionId,
+	};
+}
+
+function productEvent(websiteId: string, distinctId: string, name: string, occurredAt: Date) {
+	return {
+		id: randomUUID(),
+		website_id: websiteId,
+		name,
+		source: EventSource.Browser,
+		occurred_at: occurredAt,
+		path: '/',
+		properties: null,
+		distinct_id: distinctId,
 	};
 }

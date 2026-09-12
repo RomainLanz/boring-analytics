@@ -25,6 +25,7 @@ export const controllers = {
   },
   websites: {
     CreateWebsite: () => import('#app/websites/controllers/create_website_controller'),
+    UpdateWebsiteIdentityMode: () => import('#app/websites/controllers/update_website_identity_mode_controller'),
     Website: () => import('#app/websites/controllers/website_controller'),
     WebsiteEvents: () => import('#app/websites/controllers/website_events_controller'),
   },

@@ -4,7 +4,13 @@ import { EventSource } from '#collection/event_source';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import type { EventProperties } from '#collection/browser_event_protocol';
 
-export interface BrowserEvent {
+interface EventIdentity {
+	anonymousId: string | null;
+	sessionId: string | null;
+	distinctId: string | null;
+}
+
+export interface BrowserEvent extends EventIdentity {
 	name: string;
 	occurredAt: Date;
 	path: string;
@@ -13,11 +19,9 @@ export interface BrowserEvent {
 	utmMedium: string | null;
 	utmCampaign: string | null;
 	properties: EventProperties | null;
-	anonymousId: string;
-	sessionId: string;
 }
 
-export interface ServerEvent {
+export interface ServerEvent extends EventIdentity {
 	name: string;
 	occurredAt: Date;
 	path: string;
@@ -46,6 +50,7 @@ export class EventRepository {
 				properties: event.properties,
 				anonymous_id: event.anonymousId,
 				session_id: event.sessionId,
+				distinct_id: event.distinctId,
 			})
 			.execute();
 	}
@@ -62,8 +67,9 @@ export class EventRepository {
 				occurred_at: event.occurredAt,
 				path: event.path,
 				properties: event.properties,
-				anonymous_id: null,
-				session_id: null,
+				anonymous_id: event.anonymousId,
+				session_id: event.sessionId,
+				distinct_id: event.distinctId,
 				referrer: null,
 				utm_source: null,
 				utm_medium: null,

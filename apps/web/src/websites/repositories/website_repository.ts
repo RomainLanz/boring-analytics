@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { inject } from '@adonisjs/core';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import { AllowedDomain } from '#websites/domain/allowed_domain';
+import { parseWebsiteIdentityMode, type WebsiteIdentityMode } from '#websites/website_identity_mode';
 
 export interface CreatedWebsite {
 	id: string;
@@ -46,7 +47,7 @@ export class WebsiteRepository {
 		const website = await this.transactions
 			.currentDatabase()
 			.selectFrom('websites')
-			.select(['id', 'allowed_domain'])
+			.select(['id', 'allowed_domain', 'identity_mode'])
 			.where('tracking_id', '=', trackingId)
 			.executeTakeFirst();
 
@@ -60,6 +61,33 @@ export class WebsiteRepository {
 			throw new Error(`Invalid allowed domain persisted for website ${website.id}`);
 		}
 
-		return { id: website.id, allowedDomain: allowedDomain.value };
+		return {
+			id: website.id,
+			allowedDomain: allowedDomain.value,
+			identityMode: parseWebsiteIdentityMode(website.identity_mode),
+		};
+	}
+
+	async updateIdentityModeForOwner(ownerUserId: string, websiteId: string, identityMode: WebsiteIdentityMode) {
+		const website = await this.transactions
+			.currentDatabase()
+			.selectFrom('websites')
+			.innerJoin('workspaces', 'workspaces.id', 'websites.workspace_id')
+			.select('websites.id')
+			.where('websites.id', '=', websiteId)
+			.where('workspaces.owner_user_id', '=', ownerUserId)
+			.executeTakeFirst();
+
+		if (!website) {
+			return false;
+		}
+
+		await this.transactions
+			.currentDatabase()
+			.updateTable('websites')
+			.set({ identity_mode: identityMode })
+			.where('id', '=', website.id)
+			.execute();
+		return true;
 	}
 }

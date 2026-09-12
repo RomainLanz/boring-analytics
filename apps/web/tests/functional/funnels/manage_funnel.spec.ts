@@ -130,6 +130,49 @@ test.group('Manage Funnel', (group) => {
 		assert.lengthOf(await db.selectFrom('funnels').select('id').execute(), 0);
 	});
 
+	test('creates a Product Funnel with a multi-session window and keeps its identity after a mode change', async ({
+		assert,
+	}) => {
+		const { ownerUserId, websiteId } = await createWebsite('product');
+		const createFunnel = await app.container.make(CreateFunnel);
+		const updateFunnel = await app.container.make(UpdateFunnel);
+		const definition = {
+			name: 'Product activation',
+			conversionWindowSeconds: 7 * 24 * 60 * 60,
+			steps: [
+				{ eventName: 'signup', filter: null },
+				{ eventName: 'activated', filter: null },
+			],
+		};
+
+		const created = await createFunnel.execute({ ownerUserId, websiteId, ...definition });
+		assert.isTrue(created.ok);
+
+		if (!created.ok) {
+			return;
+		}
+
+		assert.deepInclude(
+			await db.selectFrom('funnels').selectAll().where('id', '=', created.value.id).executeTakeFirstOrThrow(),
+			{ identity_kind: 'distinct_id', conversion_window_seconds: 7 * 24 * 60 * 60 },
+		);
+		await db.updateTable('websites').set({ identity_mode: 'anonymous' }).where('id', '=', websiteId).execute();
+
+		const updated = await updateFunnel.execute({
+			ownerUserId,
+			websiteId,
+			funnelId: created.value.id,
+			...definition,
+			name: 'Product activation retained',
+		});
+
+		assert.isTrue(updated.ok);
+		assert.deepInclude(
+			await db.selectFrom('funnels').selectAll().where('id', '=', created.value.id).executeTakeFirstOrThrow(),
+			{ identity_kind: 'distinct_id', conversion_window_seconds: 7 * 24 * 60 * 60 },
+		);
+	});
+
 	test('database rejects persisted filters that the read model cannot decode', async ({ assert }) => {
 		const { websiteId } = await createWebsite();
 		const funnelId = randomUUID();
@@ -161,7 +204,7 @@ test.group('Manage Funnel', (group) => {
 	});
 });
 
-async function createWebsite() {
+async function createWebsite(identityMode: 'anonymous' | 'product' = 'anonymous') {
 	const ownerUserId = await createUser();
 	const workspace = await db
 		.selectFrom('workspaces')
@@ -177,6 +220,7 @@ async function createWebsite() {
 			name: 'Boring Money',
 			tracking_id: randomUUID(),
 			allowed_domain: 'boring.money',
+			identity_mode: identityMode,
 		})
 		.execute();
 	return { ownerUserId, websiteId };

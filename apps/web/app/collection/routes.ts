@@ -26,6 +26,10 @@ router
 			.where('id', router.matchers.uuid())
 			.as('website_server_keys.index');
 		router
+			.patch('/websites/:id/identity-mode', [controllers.websites.UpdateWebsiteIdentityMode, 'execute'])
+			.where('id', router.matchers.uuid())
+			.as('website_identity_mode.update');
+		router
 			.post('/websites/:id/server-key', [controllers.collection.CreateServerKey, 'execute'])
 			.where('id', router.matchers.uuid())
 			.as('website_server_keys.store');

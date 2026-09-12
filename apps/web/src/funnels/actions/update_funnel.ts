@@ -16,13 +16,23 @@ export class UpdateFunnel {
 	async execute(
 		params: FunnelDefinitionValue & { ownerUserId: string; websiteId: string; funnelId: string },
 	): Promise<Result<void, UpdateFunnelError>> {
-		const definition = createFunnelDefinition(params);
-
-		if (!definition.ok) {
-			return definition;
-		}
-
 		return this.transactions.run(async () => {
+			const identityKind = await this.funnels.findIdentityKindForExistingFunnel(
+				params.ownerUserId,
+				params.websiteId,
+				params.funnelId,
+			);
+
+			if (!identityKind) {
+				return err({ type: 'funnel_not_found' });
+			}
+
+			const definition = createFunnelDefinition(params, identityKind);
+
+			if (!definition.ok) {
+				return definition;
+			}
+
 			const updated = await this.funnels.updateForOwner(
 				params.ownerUserId,
 				params.websiteId,

@@ -120,6 +120,12 @@ const routes = {
     tokens: [{"old":"/websites/:id/settings","type":0,"val":"websites","end":""},{"old":"/websites/:id/settings","type":1,"val":"id","end":""},{"old":"/websites/:id/settings","type":0,"val":"settings","end":""}],
     types: placeholder as Registry['website_server_keys.index']['types'],
   },
+  'website_identity_mode.update': {
+    methods: ["PATCH"],
+    pattern: '/websites/:id/identity-mode',
+    tokens: [{"old":"/websites/:id/identity-mode","type":0,"val":"websites","end":""},{"old":"/websites/:id/identity-mode","type":1,"val":"id","end":""},{"old":"/websites/:id/identity-mode","type":0,"val":"identity-mode","end":""}],
+    types: placeholder as Registry['website_identity_mode.update']['types'],
+  },
   'website_server_keys.store': {
     methods: ["POST"],
     pattern: '/websites/:id/server-key',
