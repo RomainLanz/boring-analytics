@@ -6,6 +6,42 @@ import type { ApiDefinition } from './tree.d.ts'
 const placeholder: any = {}
 
 const routes = {
+  'funnels.index': {
+    methods: ["GET","HEAD"],
+    pattern: '/websites/:id/funnels',
+    tokens: [{"old":"/websites/:id/funnels","type":0,"val":"websites","end":""},{"old":"/websites/:id/funnels","type":1,"val":"id","end":""},{"old":"/websites/:id/funnels","type":0,"val":"funnels","end":""}],
+    types: placeholder as Registry['funnels.index']['types'],
+  },
+  'funnels.create': {
+    methods: ["GET","HEAD"],
+    pattern: '/websites/:id/funnels/new',
+    tokens: [{"old":"/websites/:id/funnels/new","type":0,"val":"websites","end":""},{"old":"/websites/:id/funnels/new","type":1,"val":"id","end":""},{"old":"/websites/:id/funnels/new","type":0,"val":"funnels","end":""},{"old":"/websites/:id/funnels/new","type":0,"val":"new","end":""}],
+    types: placeholder as Registry['funnels.create']['types'],
+  },
+  'funnels.store': {
+    methods: ["POST"],
+    pattern: '/websites/:id/funnels',
+    tokens: [{"old":"/websites/:id/funnels","type":0,"val":"websites","end":""},{"old":"/websites/:id/funnels","type":1,"val":"id","end":""},{"old":"/websites/:id/funnels","type":0,"val":"funnels","end":""}],
+    types: placeholder as Registry['funnels.store']['types'],
+  },
+  'funnels.show': {
+    methods: ["GET","HEAD"],
+    pattern: '/websites/:id/funnels/:funnelId',
+    tokens: [{"old":"/websites/:id/funnels/:funnelId","type":0,"val":"websites","end":""},{"old":"/websites/:id/funnels/:funnelId","type":1,"val":"id","end":""},{"old":"/websites/:id/funnels/:funnelId","type":0,"val":"funnels","end":""},{"old":"/websites/:id/funnels/:funnelId","type":1,"val":"funnelId","end":""}],
+    types: placeholder as Registry['funnels.show']['types'],
+  },
+  'funnels.edit': {
+    methods: ["GET","HEAD"],
+    pattern: '/websites/:id/funnels/:funnelId/edit',
+    tokens: [{"old":"/websites/:id/funnels/:funnelId/edit","type":0,"val":"websites","end":""},{"old":"/websites/:id/funnels/:funnelId/edit","type":1,"val":"id","end":""},{"old":"/websites/:id/funnels/:funnelId/edit","type":0,"val":"funnels","end":""},{"old":"/websites/:id/funnels/:funnelId/edit","type":1,"val":"funnelId","end":""},{"old":"/websites/:id/funnels/:funnelId/edit","type":0,"val":"edit","end":""}],
+    types: placeholder as Registry['funnels.edit']['types'],
+  },
+  'funnels.update': {
+    methods: ["PUT"],
+    pattern: '/websites/:id/funnels/:funnelId',
+    tokens: [{"old":"/websites/:id/funnels/:funnelId","type":0,"val":"websites","end":""},{"old":"/websites/:id/funnels/:funnelId","type":1,"val":"id","end":""},{"old":"/websites/:id/funnels/:funnelId","type":0,"val":"funnels","end":""},{"old":"/websites/:id/funnels/:funnelId","type":1,"val":"funnelId","end":""}],
+    types: placeholder as Registry['funnels.update']['types'],
+  },
   'new_account.create': {
     methods: ["GET","HEAD"],
     pattern: '/signup',

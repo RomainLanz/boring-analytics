@@ -5,12 +5,18 @@ import { limitCollectionSource, limitCollectionWebsite } from '#start/limiter';
 
 router
 	.post('/api/events', [controllers.collection.RecordBrowserEvent, 'execute'])
-	.use([limitCollectionSource, middleware.requireJson(), middleware.bodyparser(), limitCollectionWebsite])
+	.use([
+		limitCollectionSource,
+		middleware.requireJson(),
+		middleware.bodyparser(),
+		middleware.eventPayloadLimit(),
+		limitCollectionWebsite,
+	])
 	.as('events.store');
 
 router
 	.post('/api/server/events', [controllers.collection.RecordServerEvent, 'execute'])
-	.use([middleware.requireJson(), middleware.bodyparser()])
+	.use([middleware.requireJson(), middleware.bodyparser(), middleware.eventPayloadLimit()])
 	.as('server_events.store');
 
 router

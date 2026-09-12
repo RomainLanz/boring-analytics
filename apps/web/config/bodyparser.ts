@@ -1,5 +1,4 @@
 import { defineConfig } from '@adonisjs/core/bodyparser';
-import { browserEventProtocol } from '#collection/browser_event_protocol';
 
 const bodyParserConfig = defineConfig({
 	/**
@@ -29,9 +28,10 @@ const bodyParserConfig = defineConfig({
 	 */
 	json: {
 		/**
-		 * Every collected event must fit within this hard payload limit.
+		 * Authenticated Inertia forms may contain several Funnel steps. Collection
+		 * endpoints enforce their smaller protocol limit in route middleware.
 		 */
-		limit: `${browserEventProtocol.maxPayloadBytes}b`,
+		limit: '64kb',
 
 		/**
 		 * Normalize empty string values to null.

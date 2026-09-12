@@ -1,5 +1,6 @@
 import { test } from '@japa/runner';
-import { anonymousIdentityRotation, deriveAnonymousIdentity } from '#collection/services/anonymous_identity';
+import { anonymousIdentityRotation } from '#collection/anonymous_identity_policy';
+import { deriveAnonymousIdentity } from '#collection/services/anonymous_identity';
 
 const input = {
 	websiteId: '0199425d-3208-7000-8000-000000000001',

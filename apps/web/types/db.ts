@@ -40,6 +40,22 @@ export interface Events {
   website_id: string;
 }
 
+export interface Funnels {
+  conversion_window_seconds: number;
+  created_at: Generated<Timestamp>;
+  id: string;
+  name: string;
+  updated_at: Generated<Timestamp>;
+  website_id: string;
+}
+
+export interface FunnelSteps {
+  event_name: string;
+  filter: Json | null;
+  funnel_id: string;
+  position: number;
+}
+
 export interface Users {
   created_at: Generated<Timestamp>;
   email: string;
@@ -76,6 +92,8 @@ export interface Workspaces {
 
 export interface DB {
   events: Events;
+  funnel_steps: FunnelSteps;
+  funnels: Funnels;
   users: Users;
   website_server_keys: WebsiteServerKeys;
   websites: Websites;

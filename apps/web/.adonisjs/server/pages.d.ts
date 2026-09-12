@@ -17,6 +17,10 @@ declare module '@adonisjs/inertia/types' {
     'auth/signup': ExtractProps<(typeof import('../../inertia/pages/auth/signup.tsx'))['default']>
     'errors/not_found': ExtractProps<(typeof import('../../inertia/pages/errors/not_found.tsx'))['default']>
     'errors/server_error': ExtractProps<(typeof import('../../inertia/pages/errors/server_error.tsx'))['default']>
+    'funnels/create': ExtractProps<(typeof import('../../inertia/pages/funnels/create.tsx'))['default']>
+    'funnels/edit': ExtractProps<(typeof import('../../inertia/pages/funnels/edit.tsx'))['default']>
+    'funnels/index': ExtractProps<(typeof import('../../inertia/pages/funnels/index.tsx'))['default']>
+    'funnels/show': ExtractProps<(typeof import('../../inertia/pages/funnels/show.tsx'))['default']>
     'home': ExtractProps<(typeof import('../../inertia/pages/home.tsx'))['default']>
     'websites/create': ExtractProps<(typeof import('../../inertia/pages/websites/create.tsx'))['default']>
     'websites/events': ExtractProps<(typeof import('../../inertia/pages/websites/events.tsx'))['default']>

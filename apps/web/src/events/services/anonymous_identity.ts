@@ -1,11 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { inject } from '@adonisjs/core';
+import { anonymousIdentityRotation } from '#collection/anonymous_identity_policy';
 import env from '#start/env';
-
-export const anonymousIdentityRotation = {
-	anonymousIdMs: 24 * 60 * 60 * 1000,
-	sessionIdMs: 30 * 60 * 1000,
-} as const;
 
 interface AnonymousIdentityInput {
 	websiteId: string;

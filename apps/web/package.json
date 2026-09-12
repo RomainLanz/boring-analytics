@@ -8,6 +8,7 @@
     "#app/*": "./app/*.js",
     "#core/*": "./src/core/*.js",
     "#collection/*": "./src/events/*.js",
+		"#funnels/*": "./src/funnels/*.js",
     "#identity/*": "./src/identity/*.js",
     "#shared/*": "./src/shared/*.js",
     "#websites/*": "./src/websites/*.js",

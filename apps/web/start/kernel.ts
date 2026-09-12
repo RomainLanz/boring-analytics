@@ -41,6 +41,7 @@ export const middleware = router.named({
 	initializeAuth: () => import('@adonisjs/auth/initialize_auth_middleware'),
 	silentAuth: () => import('#app/middleware/silent_auth_middleware'),
 	requireJson: () => import('#app/collection/middleware/require_json_middleware'),
+	eventPayloadLimit: () => import('#app/collection/middleware/event_payload_limit_middleware'),
 	guest: () => import('#app/middleware/guest_middleware'),
 	auth: () => import('#app/middleware/auth_middleware'),
 });

@@ -4,6 +4,12 @@ type ParamValue = string | number | bigint | boolean
 
 export type ScannedRoutes = {
   ALL: {
+    'funnels.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'funnels.create': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'funnels.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'funnels.show': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
+    'funnels.edit': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
+    'funnels.update': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'new_account.store': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
@@ -22,6 +28,10 @@ export type ScannedRoutes = {
     'home': { paramsTuple?: []; params?: {} }
   }
   GET: {
+    'funnels.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'funnels.create': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'funnels.show': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
+    'funnels.edit': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
     'account.show': { paramsTuple?: []; params?: {} }
@@ -32,6 +42,10 @@ export type ScannedRoutes = {
     'home': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
+    'funnels.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'funnels.create': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'funnels.show': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
+    'funnels.edit': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
     'account.show': { paramsTuple?: []; params?: {} }
@@ -42,6 +56,7 @@ export type ScannedRoutes = {
     'home': { paramsTuple?: []; params?: {} }
   }
   POST: {
+    'funnels.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'new_account.store': { paramsTuple?: []; params?: {} }
     'session.store': { paramsTuple?: []; params?: {} }
     'session.destroy': { paramsTuple?: []; params?: {} }
@@ -49,6 +64,9 @@ export type ScannedRoutes = {
     'events.store': { paramsTuple?: []; params?: {} }
     'server_events.store': { paramsTuple?: []; params?: {} }
     'website_server_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+  }
+  PUT: {
+    'funnels.update': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
   }
   DELETE: {
     'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

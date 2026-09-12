@@ -2,6 +2,14 @@
 import type { routes } from './index.ts'
 
 export interface ApiDefinition {
+  funnels: {
+    index: typeof routes['funnels.index']
+    create: typeof routes['funnels.create']
+    store: typeof routes['funnels.store']
+    show: typeof routes['funnels.show']
+    edit: typeof routes['funnels.edit']
+    update: typeof routes['funnels.update']
+  }
   newAccount: {
     create: typeof routes['new_account.create']
     store: typeof routes['new_account.store']

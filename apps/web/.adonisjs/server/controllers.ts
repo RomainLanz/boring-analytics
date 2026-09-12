@@ -11,6 +11,12 @@ export const controllers = {
     RevokeServerKey: () => import('#app/collection/controllers/revoke_server_key_controller'),
     ServerEventSettings: () => import('#app/collection/controllers/server_event_settings_controller'),
   },
+  funnels: {
+    CreateFunnel: () => import('#app/funnels/controllers/create_funnel_controller'),
+    EditFunnel: () => import('#app/funnels/controllers/edit_funnel_controller'),
+    FunnelReport: () => import('#app/funnels/controllers/funnel_report_controller'),
+    WebsiteFunnels: () => import('#app/funnels/controllers/website_funnels_controller'),
+  },
   identity: {
     Account: () => import('#app/identity/controllers/account_controller'),
     Login: () => import('#app/identity/controllers/login_controller'),

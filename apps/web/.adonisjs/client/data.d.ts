@@ -7,6 +7,9 @@
 import type { InferData, InferVariants } from '@adonisjs/core/types/transformers'
 import type { InferSharedProps, InferFlashData } from '@adonisjs/inertia/types'
 import type CollectionServerEventSettingsTransformer from '#app/collection/transformers/server_event_settings_transformer'
+import type FunnelsFunnelEditorTransformer from '#app/funnels/transformers/funnel_editor_transformer'
+import type FunnelsFunnelIndexTransformer from '#app/funnels/transformers/funnel_index_transformer'
+import type FunnelsFunnelReportTransformer from '#app/funnels/transformers/funnel_report_transformer'
 import type IdentityAccountDetailsTransformer from '#app/identity/transformers/account_details_transformer'
 import type UserTransformer from '#app/transformers/user_transformer'
 import type WebsitesWebsiteEventsTransformer from '#app/websites/transformers/website_events_transformer'
@@ -18,6 +21,20 @@ export namespace Data {
     export type ServerEventSettings = InferData<CollectionServerEventSettingsTransformer>
     export namespace ServerEventSettings {
       export type Variants = InferVariants<CollectionServerEventSettingsTransformer>
+    }
+  }
+  export namespace Funnels {
+    export type FunnelEditor = InferData<FunnelsFunnelEditorTransformer>
+    export namespace FunnelEditor {
+      export type Variants = InferVariants<FunnelsFunnelEditorTransformer>
+    }
+    export type FunnelIndex = InferData<FunnelsFunnelIndexTransformer>
+    export namespace FunnelIndex {
+      export type Variants = InferVariants<FunnelsFunnelIndexTransformer>
+    }
+    export type FunnelReport = InferData<FunnelsFunnelReportTransformer>
+    export namespace FunnelReport {
+      export type Variants = InferVariants<FunnelsFunnelReportTransformer>
     }
   }
   export namespace Identity {

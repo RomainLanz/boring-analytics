@@ -7,6 +7,78 @@ import type { InferInput, SimpleError } from '@vinejs/vine/types'
 export type ParamValue = string | number | bigint | boolean
 
 export interface Registry {
+  'funnels.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/:id/funnels'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/funnels/controllers/website_funnels_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/funnels/controllers/website_funnels_controller').default['render']>>>
+    }
+  }
+  'funnels.create': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/:id/funnels/new'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/funnels/controllers/create_funnel_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/funnels/controllers/create_funnel_controller').default['render']>>>
+    }
+  }
+  'funnels.store': {
+    methods: ["POST"]
+    pattern: '/websites/:id/funnels'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#app/funnels/validators/funnel_validator').funnelValidator)>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#app/funnels/validators/funnel_validator').funnelValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/funnels/controllers/create_funnel_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/funnels/controllers/create_funnel_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'funnels.show': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/:id/funnels/:funnelId'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue, ParamValue]
+      params: { id: ParamValue; funnelId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/funnels/controllers/funnel_report_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/funnels/controllers/funnel_report_controller').default['render']>>>
+    }
+  }
+  'funnels.edit': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/:id/funnels/:funnelId/edit'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue, ParamValue]
+      params: { id: ParamValue; funnelId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/funnels/controllers/edit_funnel_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/funnels/controllers/edit_funnel_controller').default['render']>>>
+    }
+  }
+  'funnels.update': {
+    methods: ["PUT"]
+    pattern: '/websites/:id/funnels/:funnelId'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#app/funnels/validators/funnel_validator').funnelValidator)>>
+      paramsTuple: [ParamValue, ParamValue]
+      params: { id: ParamValue; funnelId: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#app/funnels/validators/funnel_validator').funnelValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/funnels/controllers/edit_funnel_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/funnels/controllers/edit_funnel_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
   'new_account.create': {
     methods: ["GET","HEAD"]
     pattern: '/signup'
