@@ -105,8 +105,16 @@ export class FunnelReportQuery {
 		const persistedSteps = funnel.persisted_steps;
 		const identityKind = parseFunnelIdentityKind(funnel.identity_kind);
 		const identityColumn = sql.ref(`events.${identityKind}`);
-		const { startDate, endDate, periodStart, periodEnd } = websiteReportPeriod(funnel.website_id, funnel.timezone, now);
-		const matureBefore = new Date(periodEnd.getTime() - funnel.conversion_window_seconds * 1_000);
+		const conversionWindowMilliseconds = funnel.conversion_window_seconds * 1_000;
+		const cohortPeriodEnd =
+			identityKind === 'distinct_id' ? new Date(now.getTime() - conversionWindowMilliseconds) : now;
+		const { startDate, endDate, periodStart, periodEnd } = websiteReportPeriod(
+			funnel.website_id,
+			funnel.timezone,
+			cohortPeriodEnd,
+		);
+		const matureBefore =
+			identityKind === 'distinct_id' ? periodEnd : new Date(periodEnd.getTime() - conversionWindowMilliseconds);
 		const capturedSteps = sql.join(
 			persistedSteps.map((step) => {
 				const filter = step.filter === null ? sql`null::jsonb` : sql`${step.filter}::jsonb`;

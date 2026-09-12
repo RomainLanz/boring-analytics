@@ -195,6 +195,46 @@ test.group('Funnel report query', (group) => {
 			totalDropoffs: 2,
 		});
 	});
+
+	test('reports the latest mature Product cohorts at the 30-day window limit', async ({ assert }) => {
+		const { ownerUserId, websiteId } = await createWebsite('product');
+		const funnelId = randomUUID();
+		await db
+			.insertInto('funnels')
+			.values({
+				id: funnelId,
+				website_id: websiteId,
+				name: 'Long activation',
+				identity_kind: 'distinct_id',
+				conversion_window_seconds: 30 * 24 * 60 * 60,
+			})
+			.execute();
+		await db
+			.insertInto('funnel_steps')
+			.values([
+				{ funnel_id: funnelId, position: 1, event_name: 'signup', filter: null },
+				{ funnel_id: funnelId, position: 2, event_name: 'subscription_started', filter: null },
+			])
+			.execute();
+		await db
+			.insertInto('events')
+			.values([
+				productEvent(websiteId, 'mature', 'signup', '2026-02-20T10:00:00.000Z'),
+				productEvent(websiteId, 'mature', 'subscription_started', '2026-03-20T10:00:00.000Z'),
+				productEvent(websiteId, 'still-open', 'signup', '2026-03-01T10:00:00.000Z'),
+				productEvent(websiteId, 'still-open', 'subscription_started', '2026-03-02T10:00:00.000Z'),
+			])
+			.execute();
+
+		const query = await app.container.make(FunnelReportQuery);
+		const report = await query.execute(funnelId, websiteId, ownerUserId, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.deepEqual(report?.period, { startDate: '2026-01-30', endDate: '2026-02-28' });
+		assert.deepEqual(
+			report?.steps.map(({ entrants }) => entrants),
+			[1, 1],
+		);
+	});
 });
 
 async function createWebsite(identityMode: 'anonymous' | 'product' = 'anonymous') {
