@@ -15,7 +15,7 @@ This repository currently contains the development foundation only. Product anal
 - Yarn 4 workspaces and a shared dependency catalog;
 - a design-system workspace using Tailwind CSS 4, Tailwind Variants, Ark UI, and Storybook;
 - Oxlint and Oxfmt as the only linting and formatting tools;
-- Docker Compose for the local Postgres service;
+- Docker Compose for local Postgres and the self-hosted application stack;
 - architecture documentation and `AGENTS.md` instructions designed to guide coding agents.
 
 ## Repository structure
@@ -38,7 +38,8 @@ This repository currently contains the development foundation only. Product anal
 │   ├── architecture/        application architecture rules
 │   ├── agents/              task-specific guidance for coding agents
 │   └── adr/                 architectural decision records
-├── compose.yml              local Postgres service
+├── compose.dev.yml          local Postgres service
+├── compose.yml              self-hosted application and Postgres
 ├── oxfmt.config.ts          repository-wide formatting rules
 ├── oxlint.config.ts         repository-wide linting rules
 └── AGENTS.md                entry point for coding agents
@@ -137,6 +138,9 @@ yarn docker:down
 
 Raw event retention, the bounded purge command, host scheduling, and the portable owner export are documented in
 [Data lifecycle](docs/data-lifecycle.md).
+
+Production installation, health probes, updates, PostgreSQL backup and restore, and the disposable Docker smoke test
+are documented in [Self-hosting with Docker Compose](docs/self-hosting.md).
 
 Create a user interactively with the `create:user` Ace command:
 

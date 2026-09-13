@@ -46,8 +46,7 @@ command once per day with the host scheduler. For a checkout managed directly on
 17 3 * * * cd /srv/boring-analytics && corepack yarn workspace @boring-analytics/web exec node ace events:purge
 ```
 
-For a container deployment, run the same command in the existing application container. Replace `app` with its Compose
-service name:
+For the repository's Compose deployment, run the command in the existing application container:
 
 ```cron
 17 3 * * * cd /srv/boring-analytics && docker compose exec -T app node ace events:purge

@@ -1,0 +1,13 @@
+.git
+.amp
+/backups
+node_modules
+**/node_modules
+build
+**/build
+**/.env
+**/.env.*
+!**/.env.example
+apps/web/public/assets
+apps/web/public/tracker.js
+packages/design-system/storybook-static

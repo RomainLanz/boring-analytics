@@ -24,6 +24,10 @@ export const controllers = {
     OwnerDataExport: () => import('#app/identity/controllers/owner_data_export_controller'),
     RegisterUser: () => import('#app/identity/controllers/register_user_controller'),
   },
+  shared: {
+    Liveness: () => import('#app/shared/controllers/liveness_controller'),
+    Readiness: () => import('#app/shared/controllers/readiness_controller'),
+  },
   websites: {
     CreateWebsite: () => import('#app/websites/controllers/create_website_controller'),
     UpdateWebsiteIdentityMode: () => import('#app/websites/controllers/update_website_identity_mode_controller'),

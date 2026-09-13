@@ -1,14 +1,65 @@
+name: boring-analytics
+
 services:
   database:
-    image: postgres:18-alpine
-    ports:
-      - 5432:5432
+    image: postgres:18.0-alpine3.22
+    restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql
     environment:
       POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: app
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U app -d app']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  migrate:
+    build:
+      context: .
+    restart: 'no'
+    command: [node, ace, migrate]
+    environment: &app-environment
+      NODE_ENV: production
+      PORT: 3333
+      HOST: 0.0.0.0
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in .env}
+      APP_URL: ${APP_URL:?Set APP_URL in .env}
+      ANONYMOUS_ID_SECRET: ${ANONYMOUS_ID_SECRET:?Set ANONYMOUS_ID_SECRET in .env}
+      EVENT_TIME_TOLERANCE_HOURS: ${EVENT_TIME_TOLERANCE_HOURS:-24}
+      TRUST_PROXY: ${TRUST_PROXY:-loopback, linklocal, uniquelocal}
+      DATABASE_URL: postgres://app:${POSTGRES_PASSWORD}@database:5432/app
+      SESSION_DRIVER: cookie
+    depends_on:
+      database:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    environment: *app-environment
+    ports:
+      - '127.0.0.1:${APP_PORT:-3333}:3333'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3333/health/ready').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
 volumes:
   postgres-data:
