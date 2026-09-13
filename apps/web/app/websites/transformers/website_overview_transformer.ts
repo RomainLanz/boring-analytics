@@ -8,6 +8,7 @@ export default class WebsiteOverviewTransformer extends BaseTransformer<WebsiteO
 			'period',
 			'dataAvailability',
 			'metrics',
+			'sessionMetrics',
 			'trend',
 			'topPages',
 			'referrers',

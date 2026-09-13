@@ -6,8 +6,10 @@ import {
 	isValidDistinctId,
 	isValidEventId,
 	isValidEventProperties,
+	isValidSessionId,
 	normalizeBrowserEventPath,
 } from '#collection/browser_event_protocol';
+import { sessionForActivity, type BrowserSessionState } from '#collection/browser_session';
 import type { EventProperties } from '#collection/browser_event_protocol';
 
 declare global {
@@ -34,6 +36,63 @@ if (script && trackingId) {
 	let previousUrl = window.location.href;
 	let referrer = withoutQueryOrFragment(document.referrer);
 	let distinctId = isValidDistinctId(script.dataset.distinctId) ? script.dataset.distinctId : undefined;
+	const sessionStorageKey = `boringAnalytics:${trackingId}:session`;
+	let browserSession = readBrowserSession() ?? null;
+	let sessionStorageWritable = true;
+
+	function readBrowserSession(): BrowserSessionState | null | undefined {
+		try {
+			const stored: unknown = JSON.parse(sessionStorage.getItem(sessionStorageKey) ?? 'null');
+
+			if (
+				typeof stored === 'object' &&
+				stored !== null &&
+				'id' in stored &&
+				isValidSessionId(stored.id) &&
+				'lastActivityAt' in stored &&
+				typeof stored.lastActivityAt === 'number' &&
+				Number.isFinite(stored.lastActivityAt)
+			) {
+				return { id: stored.id, lastActivityAt: stored.lastActivityAt };
+			}
+		} catch {
+			// Browsers may disable sessionStorage. The in-memory session still works for this document.
+			return undefined;
+		}
+
+		return null;
+	}
+
+	function createSessionId() {
+		if (typeof crypto.randomUUID === 'function') {
+			return crypto.randomUUID();
+		}
+
+		const bytes = crypto.getRandomValues(new Uint8Array(16));
+		bytes[6] = (bytes[6] & 0x0f) | 0x40;
+		bytes[8] = (bytes[8] & 0x3f) | 0x80;
+		const value = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+		return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+	}
+
+	function sessionIdForActivity(activityAt: number) {
+		const storedSession = sessionStorageWritable ? readBrowserSession() : undefined;
+
+		if (storedSession !== undefined) {
+			browserSession = storedSession;
+		}
+
+		browserSession = sessionForActivity(browserSession, activityAt, createSessionId);
+
+		try {
+			sessionStorage.setItem(sessionStorageKey, JSON.stringify(browserSession));
+		} catch {
+			// Keep the session in memory when browser storage is unavailable.
+			sessionStorageWritable = false;
+		}
+
+		return browserSession.id;
+	}
 
 	function withoutQueryOrFragment(value: string) {
 		if (!value) {
@@ -98,13 +157,16 @@ if (script && trackingId) {
 			return null;
 		}
 
+		const occurredAt = new Date();
+
 		return {
 			distinctId,
 			eventId,
 			name,
-			occurredAt: new Date().toISOString(),
+			occurredAt: occurredAt.toISOString(),
 			path,
 			properties: { ...properties },
+			sessionId: sessionIdForActivity(occurredAt.getTime()),
 		};
 	}
 
@@ -151,13 +213,15 @@ if (script && trackingId) {
 			return;
 		}
 
+		const occurredAt = new Date();
 		const event = {
 			trackingId,
 			distinctId,
 			name: '$pageview',
-			occurredAt: new Date().toISOString(),
+			occurredAt: occurredAt.toISOString(),
 			path,
 			referrer,
+			sessionId: sessionIdForActivity(occurredAt.getTime()),
 			utmSource: utmParameter(url.searchParams.get('utm_source')),
 			utmMedium: utmParameter(url.searchParams.get('utm_medium')),
 			utmCampaign: utmParameter(url.searchParams.get('utm_campaign')),

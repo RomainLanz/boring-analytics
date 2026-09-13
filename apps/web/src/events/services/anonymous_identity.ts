@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { inject } from '@adonisjs/core';
-import { anonymousIdentityRotation } from '#collection/anonymous_identity_policy';
+import { anonymousIdentityRotation, legacyAnonymousSessionBucketMs } from '#collection/anonymous_identity_policy';
 import env from '#start/env';
 
 interface AnonymousIdentityInput {
@@ -27,7 +27,7 @@ export function deriveAnonymousIdentity(secret: string, input: AnonymousIdentity
 		sessionId: digest(
 			secret,
 			'session',
-			Math.floor(input.receivedAt.getTime() / anonymousIdentityRotation.sessionIdMs),
+			Math.floor(input.receivedAt.getTime() / legacyAnonymousSessionBucketMs),
 			input,
 		),
 	};

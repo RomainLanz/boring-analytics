@@ -1,5 +1,5 @@
 import { test } from '@japa/runner';
-import { anonymousIdentityRotation } from '#collection/anonymous_identity_policy';
+import { legacyAnonymousSessionBucketMs } from '#collection/anonymous_identity_policy';
 import { deriveAnonymousIdentity } from '#collection/services/anonymous_identity';
 
 const input = {
@@ -35,7 +35,7 @@ test.group('Anonymous identity', () => {
 		const after = deriveAnonymousIdentity('test-secret', { ...input, receivedAt: boundary });
 		const nextSession = deriveAnonymousIdentity('test-secret', {
 			...input,
-			receivedAt: new Date(boundary.getTime() + anonymousIdentityRotation.sessionIdMs),
+			receivedAt: new Date(boundary.getTime() + legacyAnonymousSessionBucketMs),
 		});
 
 		assert.notEqual(before.anonymousId, after.anonymousId);

@@ -11,10 +11,11 @@ order events by `occurred_at`.
 
 The application accepts event times within `EVENT_TIME_TOLERANCE_HOURS` of receipt. A report is guaranteed complete
 only when its first required event time is on or after the retention cutoff plus that tolerance. Traffic and Events
-need the displayed 30-day period. A Product Funnel shifts the displayed cohort period back by its conversion window so
-only mature cohorts appear. A 30-day report with a 30-day conversion window therefore needs about 60 days of raw
-events. With a 60-day policy, the event-time tolerance can make that edge report unavailable. The UI marks such a
-report unavailable instead of displaying partial counts as zero.
+need the displayed 30-day period. Since an active Session may last for an arbitrary time, Traffic only reports session
+metrics when each contributing Session's earliest retained Event is at least 30 minutes after the available-history
+boundary. A Product Funnel shifts the displayed cohort period back by its conversion window so only mature cohorts appear. A 30-day report with a 30-day conversion window therefore
+needs about 60 days of raw events. With a 60-day policy, the event-time tolerance can make that edge report unavailable.
+The UI marks such a report unavailable instead of displaying partial counts as zero.
 
 The purge records this availability boundary on the Website. Lengthening retention or switching to indefinite
 retention does not imply that previously purged history has returned; reports before the recorded boundary remain

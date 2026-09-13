@@ -10,6 +10,7 @@ import {
 	isValidDistinctId,
 	isValidEventId,
 	isValidEventProperties,
+	isValidSessionId,
 } from '#collection/browser_event_protocol';
 import { consumeAdditionalCollectionSourceEvents } from '#start/limiter';
 import type { HttpContext } from '@adonisjs/core/http';
@@ -31,6 +32,10 @@ const commonFields = {
 	path: vine.string().minLength(1).maxLength(browserEventProtocol.maxPathLength).regex(browserEventPathPattern),
 	distinctId: vine.string().minLength(1).maxLength(browserEventProtocol.maxDistinctIdLength).optional(),
 	eventId: vine.string().minLength(1).maxLength(browserEventProtocol.maxEventIdLength).optional(),
+	sessionId: vine
+		.string()
+		.uuid({ version: [4] })
+		.optional(),
 };
 const pageviewFields = {
 	...commonFields,
@@ -52,10 +57,10 @@ const identifyFields = {
 	name: vine.literal('$identify'),
 	distinctId: vine.string().minLength(1).maxLength(browserEventProtocol.maxDistinctIdLength),
 };
-const optionalFields = ['distinctId', 'eventId'];
+const optionalFields = ['distinctId', 'eventId', 'sessionId'];
 const pageviewExpectedFields = Object.keys(pageviewFields).filter((field) => !optionalFields.includes(field));
 const customEventExpectedFields = Object.keys(customEventFields).filter((field) => !optionalFields.includes(field));
-const identifyExpectedFields = Object.keys(identifyFields).filter((field) => field !== 'eventId');
+const identifyExpectedFields = Object.keys(identifyFields).filter((field) => !['eventId', 'sessionId'].includes(field));
 type BrowserEventKind = 'pageview' | 'identify' | 'custom';
 const expectedFieldsByKind: Record<BrowserEventKind, string[]> = {
 	pageview: pageviewExpectedFields,
@@ -84,6 +89,7 @@ function isValidPayload(record: Record<string, unknown>, custom: boolean, expect
 		hasExactFields(record, expectedFields) &&
 		(record.distinctId === undefined || isValidDistinctId(record.distinctId)) &&
 		(record.eventId === undefined || isValidEventId(record.eventId)) &&
+		(record.sessionId === undefined || isValidSessionId(record.sessionId)) &&
 		(!custom || isValidEventProperties(record.properties))
 	);
 }
@@ -184,6 +190,7 @@ async function prepareEvent(
 		userAgent: request.header('user-agent') ?? '',
 		distinctId: event.distinctId,
 		eventId: event.eventId,
+		sessionId: event.sessionId,
 	};
 	const value: RecordBrowserEventParams =
 		'properties' in event

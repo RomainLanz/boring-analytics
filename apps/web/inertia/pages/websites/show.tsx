@@ -92,11 +92,50 @@ function AvailableTrafficReport({
 	return (
 		<>
 			<Card padding="none" className="overflow-hidden">
-				<section className="border-border grid border-b sm:grid-cols-3" aria-label="Visit summary">
-					<Metric label="Pageviews" value={overview.metrics.pageviews} />
-					<Metric label="Visitors" value={overview.metrics.visitors} />
-					<Metric label="Sessions" value={overview.metrics.sessions} />
+				<section className="border-border grid border-b sm:grid-cols-2 lg:grid-cols-5" aria-label="Visit summary">
+					<Metric className="border-b sm:border-r lg:border-b-0" label="Pageviews" value={overview.metrics.pageviews} />
+					<Metric className="border-b lg:border-r lg:border-b-0" label="Visitors" value={overview.metrics.visitors} />
+					<Metric
+						className="border-b sm:border-r lg:border-b-0"
+						label="Sessions"
+						value={overview.sessionMetrics.status === 'available' ? overview.sessionMetrics.sessions : 'Unavailable'}
+					/>
+					<Metric
+						className="border-b lg:border-r lg:border-b-0"
+						label="Bounce rate"
+						value={
+							overview.sessionMetrics.status === 'available' && overview.sessionMetrics.bounceRate !== null
+								? `${overview.sessionMetrics.bounceRate.toFixed(1)}%`
+								: overview.sessionMetrics.status === 'available'
+									? '—'
+									: 'Unavailable'
+						}
+					/>
+					<Metric
+						className="sm:col-span-2 lg:col-span-1"
+						label="Median session duration"
+						value={
+							overview.sessionMetrics.status === 'available' && overview.sessionMetrics.medianDurationSeconds !== null
+								? formatDuration(overview.sessionMetrics.medianDurationSeconds)
+								: overview.sessionMetrics.status === 'available'
+									? '—'
+									: 'Unavailable'
+						}
+					/>
 				</section>
+				{overview.sessionMetrics.status === 'unavailable' ? (
+					<p className="border-border bg-surface-muted text-muted border-b px-5 py-3 text-xs">
+						{overview.sessionMetrics.reason === 'product_mode'
+							? 'Session metrics are available for Websites in Anonymous Mode.'
+							: overview.sessionMetrics.reason === 'legacy_data'
+								? 'Session metrics will appear once this period contains only inactivity-based sessions.'
+								: 'Session metrics are unavailable because the required event history has expired.'}
+					</p>
+				) : overview.sessionMetrics.bounceRate === null ? (
+					<p className="border-border bg-surface-muted text-muted border-b px-5 py-3 text-xs">
+						Bounce rate and median duration appear after a session has been inactive for 30 minutes.
+					</p>
+				) : null}
 
 				<TrendChart
 					id="traffic-heading"
@@ -177,11 +216,13 @@ function AvailableTrafficReport({
 	);
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ className, label, value }: { className?: string; label: string; value: number | string }) {
 	return (
-		<div className="border-border px-5 py-4 sm:border-r sm:last:border-r-0">
+		<div className={`border-border px-5 py-4 ${className ?? ''}`}>
 			<p className="text-muted text-xs font-medium uppercase">{label}</p>
-			<p className="text-ink mt-1 text-2xl font-bold tracking-tight tabular-nums">{formatNumber(value)}</p>
+			<p className="text-ink mt-1 text-2xl font-bold tracking-tight tabular-nums">
+				{typeof value === 'number' ? formatNumber(value) : value}
+			</p>
 		</div>
 	);
 }
@@ -253,4 +294,21 @@ const numberFormatter = new Intl.NumberFormat('en');
 
 function formatNumber(value: number) {
 	return numberFormatter.format(value);
+}
+
+function formatDuration(value: number) {
+	const totalSeconds = Math.round(value);
+	const hours = Math.floor(totalSeconds / 3_600);
+	const minutes = Math.floor((totalSeconds % 3_600) / 60);
+	const seconds = totalSeconds % 60;
+
+	if (hours > 0) {
+		return `${hours}h ${minutes}m`;
+	}
+
+	if (minutes > 0) {
+		return `${minutes}m ${seconds}s`;
+	}
+
+	return `${seconds}s`;
 }

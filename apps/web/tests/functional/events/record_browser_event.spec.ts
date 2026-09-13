@@ -200,6 +200,16 @@ test.group('POST /api/events', (group) => {
 		assert.notProperty(event, 'user_agent');
 	});
 
+	test('persists the ephemeral session supplied by the browser tracker', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const sessionId = randomUUID();
+
+		const response = await postEvent(trackingId, { sessionId });
+
+		assert.equal(response.status, 202);
+		assert.equal((await db.selectFrom('events').select('session_id').executeTakeFirstOrThrow()).session_id, sessionId);
+	});
+
 	test('keeps pageview empty nullable fields normalized to null', async ({ assert }) => {
 		const { trackingId } = await createWebsite();
 
@@ -320,6 +330,16 @@ test.group('POST /api/events', (group) => {
 			'x'.repeat(browserEventProtocol.maxEventIdLength + 1),
 		]) {
 			assert.equal((await postCustomEvent(trackingId, { eventId })).status, 422, JSON.stringify(eventId));
+		}
+
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
+	});
+
+	test('accepts only random UUIDs as ephemeral browser session IDs', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+
+		for (const sessionId of ['', 'session-a', '00000000-0000-1000-8000-000000000000', 42]) {
+			assert.equal((await postCustomEvent(trackingId, { sessionId })).status, 422, JSON.stringify(sessionId));
 		}
 
 		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);

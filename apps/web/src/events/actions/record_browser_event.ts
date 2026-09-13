@@ -16,6 +16,7 @@ interface BrowserEventContext {
 	userAgent: string;
 	distinctId?: string;
 	eventId?: string;
+	sessionId?: string;
 	batchPosition?: number;
 }
 
@@ -129,7 +130,7 @@ export class RecordBrowserEvent {
 			utmCampaign: params.type === 'pageview' ? params.utmCampaign : null,
 			properties: params.type === 'pageview' ? null : params.properties,
 			anonymousId: anonymousIdentity?.anonymousId ?? null,
-			sessionId: anonymousIdentity?.sessionId ?? null,
+			sessionId: anonymousIdentity === null ? null : (params.sessionId ?? anonymousIdentity.sessionId),
 			distinctId: identity.value,
 		});
 		return ok(undefined);

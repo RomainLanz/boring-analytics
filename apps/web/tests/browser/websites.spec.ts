@@ -35,12 +35,18 @@ test.group('Websites', (group) => {
 		await createPage.waitForURL(/\/websites\/[0-9a-f-]+$/u);
 		await createPage.assertText('h1', 'Boring Money');
 		await createPage.assertText('section[aria-label="Visit summary"] > div:first-child p:last-child', '0');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(3) p:last-child', '0');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(4) p:last-child', '—');
+		await createPage.getByText('Median session duration', { exact: true }).waitFor();
 		const emptyScale = createPage.locator('[data-chart-scale] span');
 		assert.equal(await emptyScale.count(), 1);
 		assert.equal(await emptyScale.textContent(), '0');
 
 		const website = await db.selectFrom('websites').select(['id', 'tracking_id']).executeTakeFirstOrThrow();
 		assert.match(website.tracking_id, /^[0-9a-f-]{36}$/u);
+		const now = Date.now();
+		const sessionA = randomUUID();
+		const sessionB = randomUUID();
 		await db
 			.insertInto('events')
 			.values([
@@ -49,10 +55,10 @@ test.group('Websites', (group) => {
 					website_id: website.id,
 					name: '$pageview',
 					source: EventSource.Browser,
-					occurred_at: new Date(),
+					occurred_at: new Date(now - 40 * 60 * 1_000),
 					path: '/pricing',
 					anonymous_id: 'visitor-a',
-					session_id: 'session-a',
+					session_id: sessionA,
 					referrer: 'https://google.com/search',
 					utm_source: 'newsletter',
 					utm_medium: 'email',
@@ -62,20 +68,20 @@ test.group('Websites', (group) => {
 					website_id: website.id,
 					name: '$pageview',
 					source: EventSource.Browser,
-					occurred_at: new Date(),
+					occurred_at: new Date(now - 35 * 60 * 1_000),
 					path: '/pricing',
 					anonymous_id: 'visitor-a',
-					session_id: 'session-b',
+					session_id: sessionA,
 				},
 				{
 					id: randomUUID(),
 					website_id: website.id,
 					name: '$pageview',
 					source: EventSource.Browser,
-					occurred_at: new Date(),
+					occurred_at: new Date(now - 31 * 60 * 1_000),
 					path: '/docs',
 					anonymous_id: 'visitor-b',
-					session_id: 'session-c',
+					session_id: sessionB,
 				},
 				{
 					id: randomUUID(),
@@ -100,7 +106,9 @@ test.group('Websites', (group) => {
 		await createPage.reload();
 		await createPage.assertText('section[aria-label="Visit summary"] > div:first-child p:last-child', '3');
 		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(2) p:last-child', '2');
-		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(3) p:last-child', '3');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(3) p:last-child', '2');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(4) p:last-child', '50.0%');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(5) p:last-child', '2m 30s');
 		const populatedScale = createPage.locator('[data-chart-scale] span');
 		assert.equal(await populatedScale.count(), 3);
 		assert.deepEqual(await populatedScale.allTextContents(), ['4', '2', '0']);

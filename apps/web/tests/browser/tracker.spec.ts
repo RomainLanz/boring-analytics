@@ -168,6 +168,61 @@ test.group('Browser tracker', (group) => {
 		assert.equal(events[0]?.session_id, events[1]?.session_id);
 	});
 
+	test('keeps an ephemeral anonymous session across a same-tab reload', async ({ assert, browserContext }) => {
+		const trackingId = await createWebsite();
+		const page = await browserContext.newPage();
+		const url = trackedPageUrl(trackingId, '/tracked-page', 'no-referrer').href;
+
+		await page.goto(url);
+		await waitForEvents(1);
+		const storedSession = await page.evaluate(
+			(key) => sessionStorage.getItem(key),
+			`boringAnalytics:${trackingId}:session`,
+		);
+		await page.reload();
+		await waitForEvents(2);
+
+		assert.match(storedSession ?? '', /"id":"[0-9a-f-]{36}"/u);
+		const events = await db.selectFrom('events').select('session_id').orderBy('received_at').execute();
+		assert.equal(events[0]?.session_id, JSON.parse(storedSession!).id);
+		assert.equal(events[1]?.session_id, events[0]?.session_id);
+	});
+
+	test('generates valid sessions when randomUUID is unavailable', async ({ assert, browserContext }) => {
+		const trackingId = await createWebsite();
+		await browserContext.addInitScript(() => {
+			Object.defineProperty(Crypto.prototype, 'randomUUID', { value: undefined });
+		});
+		const page = await browserContext.newPage();
+
+		await page.goto(trackedPageUrl(trackingId, '/http-compatible', 'no-referrer').href);
+		await waitForEvents(1);
+		await page.evaluate(() => window.boringAnalytics?.track('signup'));
+		await waitForEvents(2);
+
+		const events = await db.selectFrom('events').select('session_id').orderBy('received_at').execute();
+		assert.match(events[0]?.session_id ?? '', /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+		assert.equal(events[1]?.session_id, events[0]?.session_id);
+	});
+
+	test('keeps an in-memory session when sessionStorage writes fail', async ({ assert, browserContext }) => {
+		const trackingId = await createWebsite();
+		await browserContext.addInitScript(() => {
+			Storage.prototype.setItem = () => {
+				throw new DOMException('Storage quota exceeded', 'QuotaExceededError');
+			};
+		});
+		const page = await browserContext.newPage();
+
+		await page.goto(trackedPageUrl(trackingId, '/storage-disabled', 'no-referrer').href);
+		await waitForEvents(1);
+		await page.evaluate(() => window.boringAnalytics?.track('signup'));
+		await waitForEvents(2);
+
+		const events = await db.selectFrom('events').select('session_id').orderBy('received_at').execute();
+		assert.equal(events[1]?.session_id, events[0]?.session_id);
+	});
+
 	test('exposes a framework-independent custom event API with primitive properties', async ({
 		assert,
 		browserContext,
@@ -385,6 +440,16 @@ test.group('Browser tracker', (group) => {
 			ignoreDefaultArgs: ['--disable-back-forward-cache'],
 		});
 		const browserContext = await browser.newContext();
+		await browserContext.addInitScript(`
+			const NativeDate = Date;
+			const offset = () => Number(localStorage.getItem('trackerClockOffset') ?? -1860000);
+			window.Date = class extends NativeDate {
+				constructor(...args) {
+					super(...(args.length ? args : [NativeDate.now() + offset()]));
+				}
+				static now() { return NativeDate.now() + offset(); }
+			};
+		`);
 		await browserContext.addInitScript((restorationUrl) => {
 			window.addEventListener('pageshow', (event) => {
 				if (event.persisted) {
@@ -399,20 +464,24 @@ test.group('Browser tracker', (group) => {
 		try {
 			await page.goto(firstPage.href);
 			await waitForEvents(1);
+			await page.evaluate(() => localStorage.setItem('trackerClockOffset', '-600000'));
 			await page.locator('#navigate').evaluate((link, href) => link.setAttribute('href', href), secondPage.href);
 			await page.locator('#navigate').click();
 			await page.waitForURL(secondPage.href);
 			await waitForEvents(2);
+			await page.evaluate(() => localStorage.setItem('trackerClockOffset', '0'));
 			await page.evaluate('history.back()');
 			await waitForBackForwardCacheRestoration();
 			await waitForEvents(3);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
-			const events = await db.selectFrom('events').select('path').orderBy('received_at').execute();
+			const events = await db.selectFrom('events').select(['path', 'session_id']).orderBy('received_at').execute();
 			assert.deepEqual(
 				events.map(({ path }) => path),
 				['/tracked-first', '/tracked-second', '/tracked-first'],
 			);
+			assert.equal(events[1]?.session_id, events[0]?.session_id);
+			assert.equal(events[2]?.session_id, events[0]?.session_id);
 		} finally {
 			await browser.close();
 		}

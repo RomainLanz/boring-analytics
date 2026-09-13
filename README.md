@@ -179,19 +179,36 @@ This command is destructive. It refuses to run in production unless `--force` is
 
 Each Website page displays a self-contained `<script>` tag for the instance's `/tracker.js`. The tracker has no client
 framework dependency. It records the first page load and History API or `popstate` navigation, strips query strings and
-fragments from paths and referrers, honors Do Not Track, and writes no cookies or browser storage. It sends JSON using a
-cross-origin `sendBeacon` request and falls back to `fetch` with `keepalive`. The collection endpoint allows the
-credentialed CORS preflight required by `sendBeacon`, but does not read cookies, sessions, or authorization.
+fragments from paths and referrers, honors Do Not Track, and writes no cookies or durable browser identifier. It keeps
+only a random per-tab session ID and last-activity timestamp in `sessionStorage`. It sends JSON using a cross-origin
+`sendBeacon` request and falls back to `fetch` with `keepalive`. The collection endpoint allows the credentialed CORS
+preflight required by `sendBeacon`, but does not read cookies, application sessions, or authorization.
 
 Collection requests are limited to 4 KiB. For unusually long URLs, the tracker keeps the pathname and removes the
 referrer first, followed by campaign, medium, and source, until the request fits. It does not send paths longer than the
 2,048-character protocol limit.
 
-Every Website starts in Anonymous Mode. The server derives both anonymous identifiers from the Website ID, request IP, User-Agent, and
-`ANONYMOUS_ID_SECRET`. It stores only the HMAC results. `anonymous_id` rotates at UTC day boundaries. `session_id`
-rotates in fixed 30-minute windows. This simple session model may split an active visit at a window boundary, but it
-keeps identity derivation stateless and leaves no persistent browser identifier. Changing the secret immediately breaks
-linkage with prior windows; keep it out of source control and rotate it only when that break is intended.
+Every Website starts in Anonymous Mode. The server derives `anonymous_id` from the Website ID, request IP, User-Agent,
+and `ANONYMOUS_ID_SECRET`, stores only the HMAC result, and rotates it at UTC day boundaries. The tracker supplies a
+random `session_id`, renews it when the next Event is exactly 30 minutes or more after the previous activity, and keeps
+it only in `sessionStorage`. It therefore crosses clock buckets, same-tab reloads, and UTC Anonymous ID rotation without
+a cookie, durable browser identifier, or mutable per-visitor server state. Browser-created tabs normally start a new
+session, except when the browser initially copies `sessionStorage` from an opener tab.
+Changing the secret immediately breaks Anonymous ID linkage; keep it out of source control and rotate it only when that
+break is intended.
+
+The endpoint temporarily accepts cached tracker versions that omit `sessionId` and assigns their former fixed-bucket
+HMAC. Traffic marks session metrics unavailable whenever the displayed period contains one of those legacy pageviews;
+it never presents a mixed approximation as complete. Historical Anonymous Funnels retain their original Session IDs,
+while newly collected Funnel Events use the inactivity-based tracker session without changing Funnel query semantics.
+
+Traffic counts a Session when it contains a `$pageview`. A completed Session with exactly one `$pageview` is a bounce,
+even when it also contains custom Events. Duration is the elapsed `occurredAt` time from the first to last browser Event
+in that Session; a one-Event Session is zero seconds. Bounce rate and median duration include only Sessions whose last
+activity is at least 30 minutes old, while the Session count includes active Sessions. Delayed or out-of-order Events
+retain the Session ID assigned when the tracker created them and reports order by `occurredAt`; accepted late Events may
+therefore revise a previously reported Session. Identified Product browser Events and Product server Events have no
+Anonymous Session ID and do not contribute to these metrics.
 
 `EVENT_TIME_TOLERANCE_HOURS` bounds accepted client timestamps in both directions and defaults to 24 in the example
 environment. Existing installations must add the new variables before upgrading. The tolerance absorbs offline Beacon

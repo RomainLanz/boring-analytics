@@ -73,6 +73,40 @@ test.group('Funnel report query', (group) => {
 		);
 	});
 
+	test('keeps an Anonymous Funnel conversion together across an old fixed-session boundary', async ({ assert }) => {
+		const { ownerUserId, websiteId } = await createWebsite();
+		const funnelId = randomUUID();
+		const sessionId = randomUUID();
+		await db
+			.insertInto('funnels')
+			.values({ id: funnelId, website_id: websiteId, name: 'Signup', conversion_window_seconds: 1_800 })
+			.execute();
+		await db
+			.insertInto('funnel_steps')
+			.values([
+				{ funnel_id: funnelId, position: 1, event_name: '$pageview', filter: null },
+				{ funnel_id: funnelId, position: 2, event_name: 'signup', filter: null },
+			])
+			.execute();
+		await db
+			.insertInto('events')
+			.values([
+				event(websiteId, sessionId, '$pageview', '2026-03-20T12:29:59.000Z'),
+				event(websiteId, sessionId, 'signup', '2026-03-20T12:30:01.000Z'),
+			])
+			.execute();
+
+		const query = await app.container.make(FunnelReportQuery);
+		const report = await query.execute(funnelId, websiteId, ownerUserId, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.deepEqual(report?.summary, {
+			entrants: 1,
+			converted: 1,
+			conversionRate: 1,
+			totalDropoffs: 0,
+		});
+	});
+
 	test('includes exact time boundaries and keeps typed filters and Website sessions isolated', async ({ assert }) => {
 		const { ownerUserId, websiteId } = await createWebsite();
 		const { websiteId: otherWebsiteId } = await createWebsite();

@@ -11,6 +11,7 @@ export const browserEventProtocol = {
 	maxNameLength: 64,
 	maxDistinctIdLength: 255,
 	maxEventIdLength: 255,
+	maxSessionIdLength: 36,
 	maxProperties: 20,
 	maxPropertyKeyLength: 64,
 	maxPropertyStringLength: 255,
@@ -89,6 +90,12 @@ export function isValidEventId(value: unknown): value is string {
 		value.length <= browserEventProtocol.maxEventIdLength &&
 		!/[\p{Cc}\p{Cs}\s]/u.test(value) &&
 		isValidEventPropertyString(value)
+	);
+}
+
+export function isValidSessionId(value: unknown): value is string {
+	return (
+		typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)
 	);
 }
 

@@ -83,7 +83,8 @@ test.group('Website overview query', (group) => {
 				endDate: '2026-03-30',
 			},
 			dataAvailability: { status: 'available' },
-			metrics: { pageviews: 3, visitors: 2, sessions: 3 },
+			metrics: { pageviews: 3, visitors: 2 },
+			sessionMetrics: { status: 'unavailable', reason: 'legacy_data' },
 			trend: Array.from({ length: 30 }, (_, index) => ({
 				date: `2026-03-${String(index + 1).padStart(2, '0')}`,
 				pageviews: index === 0 || index === 28 || index === 29 ? 1 : 0,
@@ -153,7 +154,7 @@ test.group('Website overview query', (group) => {
 
 			assert.equal(overview?.period.startDate, scenario.startDate);
 			assert.equal(overview?.period.endDate, scenario.endDate);
-			assert.deepEqual(overview?.metrics, { pageviews: 1, visitors: 1, sessions: 1 });
+			assert.deepEqual(overview?.metrics, { pageviews: 1, visitors: 1 });
 			assert.deepEqual(overview?.trend[0], { date: scenario.startDate, pageviews: 1 });
 			assert.equal(overview?.trend.at(-1)?.date, scenario.endDate);
 		}
@@ -195,6 +196,154 @@ test.group('Website overview query', (group) => {
 			{ name: '[2001:db8::1]', visitors: 1 },
 			{ name: 'example.com', visitors: 1 },
 		]);
+	});
+
+	test('reports pageview-based bounce rate and median completed-session duration', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		const otherWebsite = await createWebsite(owner.id, 'Documentation', 'docs.boring.money');
+		const crossingBucket = randomUUID();
+		const twoPageviews = randomUUID();
+		const singleEvent = randomUUID();
+		const crossingAnonymousRotation = randomUUID();
+
+		await db
+			.insertInto('events')
+			.values([
+				pageview(website.id, '2026-03-20T12:29:55.000Z', {
+					anonymousId: 'bucket-visitor',
+					sessionId: crossingBucket,
+				}),
+				{
+					...pageview(website.id, '2026-03-20T12:30:05.000Z', {
+						anonymousId: 'bucket-visitor',
+						sessionId: crossingBucket,
+					}),
+					name: 'signup',
+				},
+				pageview(website.id, '2026-03-21T12:10:00.000Z', {
+					anonymousId: 'returning-visitor',
+					sessionId: twoPageviews,
+				}),
+				pageview(website.id, '2026-03-21T12:00:00.000Z', {
+					anonymousId: 'returning-visitor',
+					sessionId: twoPageviews,
+				}),
+				pageview(website.id, '2026-03-22T12:00:00.000Z', {
+					anonymousId: 'single-event-visitor',
+					sessionId: singleEvent,
+				}),
+				pageview(website.id, '2026-03-23T23:50:00.000Z', {
+					anonymousId: 'anonymous-day-one',
+					sessionId: crossingAnonymousRotation,
+				}),
+				{
+					...pageview(website.id, '2026-03-24T00:10:00.000Z', {
+						anonymousId: 'anonymous-day-two',
+						sessionId: crossingAnonymousRotation,
+					}),
+					name: 'checkout',
+				},
+				pageview(otherWebsite.id, '2026-03-20T12:45:00.000Z', {
+					anonymousId: 'isolated-visitor',
+					sessionId: crossingBucket,
+				}),
+			])
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.deepEqual(overview?.sessionMetrics, {
+			status: 'available',
+			sessions: 4,
+			bounceRate: 75,
+			medianDurationSeconds: 305,
+		});
+	});
+
+	test('does not present legacy or retention-truncated session metrics as complete', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const legacyWebsite = await createWebsite(owner.id, 'Legacy', 'legacy.example.com');
+		const truncatedWebsite = await createWebsite(owner.id, 'Truncated', 'truncated.example.com');
+		const productWebsite = await createWebsite(owner.id, 'Product', 'product.example.com');
+		await db
+			.updateTable('websites')
+			.set({ retention_days: null, events_available_from: new Date('2026-02-28T23:45:00.000Z') })
+			.where('id', '=', truncatedWebsite.id)
+			.execute();
+		await db.updateTable('websites').set({ identity_mode: 'product' }).where('id', '=', productWebsite.id).execute();
+		await db
+			.insertInto('events')
+			.values([
+				pageview(legacyWebsite.id, '2026-03-20T12:00:00.000Z', {
+					anonymousId: 'legacy-visitor',
+					sessionId: 'legacy-fixed-bucket-session',
+				}),
+				{
+					...pageview(truncatedWebsite.id, '2026-02-28T23:50:00.000Z', {
+						anonymousId: 'new-visitor',
+						sessionId: '238122e5-7c38-4894-914f-3db1408ebcab',
+					}),
+					name: 'signup',
+				},
+				pageview(truncatedWebsite.id, '2026-03-01T00:10:00.000Z', {
+					anonymousId: 'new-visitor',
+					sessionId: '238122e5-7c38-4894-914f-3db1408ebcab',
+				}),
+				pageview(productWebsite.id, '2026-03-20T12:00:00.000Z', {
+					anonymousId: 'pre-identification-visitor',
+					sessionId: randomUUID(),
+				}),
+			])
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const now = new Date('2026-03-30T12:00:00.000Z');
+		const legacy = await overviewQuery.execute(legacyWebsite.id, owner.id, now);
+		const truncated = await overviewQuery.execute(truncatedWebsite.id, owner.id, now);
+		const product = await overviewQuery.execute(productWebsite.id, owner.id, now);
+
+		assert.deepEqual(legacy?.dataAvailability, { status: 'available' });
+		assert.deepEqual(legacy?.sessionMetrics, { status: 'unavailable', reason: 'legacy_data' });
+		assert.deepEqual(truncated?.dataAvailability, { status: 'available' });
+		assert.equal(truncated?.metrics.pageviews, 1);
+		assert.deepEqual(truncated?.sessionMetrics, { status: 'unavailable', reason: 'retention' });
+		assert.deepEqual(product?.sessionMetrics, { status: 'unavailable', reason: 'product_mode' });
+	});
+
+	test('excludes active sessions from bounce and duration while still counting them', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		const completed = randomUUID();
+		const active = randomUUID();
+		await db
+			.insertInto('events')
+			.values([
+				pageview(website.id, '2026-03-30T11:30:00.000Z', {
+					anonymousId: 'completed-visitor',
+					sessionId: completed,
+				}),
+				pageview(website.id, '2026-03-30T11:20:00.000Z', {
+					anonymousId: 'active-visitor',
+					sessionId: active,
+				}),
+				pageview(website.id, '2026-03-30T11:30:01.000Z', {
+					anonymousId: 'active-visitor',
+					sessionId: active,
+				}),
+			])
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.deepEqual(overview?.sessionMetrics, {
+			status: 'available',
+			sessions: 2,
+			bounceRate: 100,
+			medianDurationSeconds: 0,
+		});
 	});
 });
 
