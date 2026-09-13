@@ -6,6 +6,7 @@ export default class WebsiteOverviewTransformer extends BaseTransformer<WebsiteO
 		return this.pick(this.resource, [
 			'website',
 			'period',
+			'dataAvailability',
 			'metrics',
 			'trend',
 			'topPages',

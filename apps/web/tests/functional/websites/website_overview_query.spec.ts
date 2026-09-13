@@ -82,6 +82,7 @@ test.group('Website overview query', (group) => {
 				startDate: '2026-03-01',
 				endDate: '2026-03-30',
 			},
+			dataAvailability: { status: 'available' },
 			metrics: { pageviews: 3, visitors: 2, sessions: 3 },
 			trend: Array.from({ length: 30 }, (_, index) => ({
 				date: `2026-03-${String(index + 1).padStart(2, '0')}`,

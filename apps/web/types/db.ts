@@ -71,9 +71,11 @@ export interface Users {
 export interface Websites {
   allowed_domain: string;
   created_at: Generated<Timestamp>;
+  events_available_from: Timestamp | null;
   id: string;
   identity_mode: Generated<string>;
   name: string;
+  retention_days: Generated<number | null>;
   timezone: Generated<string>;
   tracking_id: string;
   workspace_id: string;

@@ -3,6 +3,7 @@ import { Card } from '@boring-analytics/design-system/card';
 import { type Data } from '@generated/data';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
+import { ReportDataUnavailable } from '~/components/report-data-unavailable';
 import { TrendChart } from '~/components/trend-chart';
 import { WebsiteReportHeader } from '~/components/website-report-header';
 import { type InertiaProps } from '~/types';
@@ -45,88 +46,20 @@ export default function ShowWebsite({ overview, trackerUrl }: PageProps) {
 					</Button>
 				</WebsiteReportHeader>
 
-				<Card padding="none" className="overflow-hidden">
-					<section className="border-border grid border-b sm:grid-cols-3" aria-label="Visit summary">
-						<Metric label="Pageviews" value={overview.metrics.pageviews} />
-						<Metric label="Visitors" value={overview.metrics.visitors} />
-						<Metric label="Sessions" value={overview.metrics.sessions} />
-					</section>
-
-					<TrendChart
-						id="traffic-heading"
-						title="Traffic"
-						dailyLabel="Daily pageviews"
-						valueLabel="Pageviews"
-						tableCaption="Daily pageviews data"
-						trend={overview.trend.map((day) => ({ date: day.date, value: day.pageviews }))}
+				{overview.dataAvailability.status === 'unavailable' ? (
+					<ReportDataUnavailable
+						availableFrom={overview.dataAvailability.availableFrom}
+						websiteId={overview.website.id}
 					/>
-				</Card>
-
-				<div className="mt-8 grid gap-5 lg:grid-cols-2">
-					<Report title="Top pages">
-						{overview.topPages.length ? (
-							<table className="w-full table-fixed text-sm">
-								<caption className="sr-only">Top pages</caption>
-								<thead className="bg-surface-muted text-muted text-[10px] font-medium uppercase sm:text-xs">
-									<tr>
-										<th scope="col" className="w-auto px-4 py-2 text-left">
-											Page
-										</th>
-										<th scope="col" className="w-16 px-1 py-2 text-right sm:w-24 sm:px-2">
-											Visitors
-										</th>
-										<th scope="col" className="w-16 px-2 py-2 text-right sm:w-24 sm:px-4">
-											<span className="sm:hidden">Views</span>
-											<span className="hidden sm:inline">Pageviews</span>
-										</th>
-									</tr>
-								</thead>
-								<tbody>
-									{overview.topPages.map((page) => (
-										<tr key={page.name} className="border-border border-t">
-											<th scope="row" className="text-ink p-0 text-left font-normal">
-												<div className="relative flex min-h-11 items-center px-4">
-													<RowBar value={page.pageviews} maximum={overview.topPages[0].pageviews} />
-													<span className="relative truncate">{page.name}</span>
-												</div>
-											</th>
-											<td className="text-muted px-1 text-right text-xs tabular-nums sm:px-2 sm:text-sm">
-												{formatNumber(page.visitors)}
-											</td>
-											<td className="text-ink px-2 text-right text-xs tabular-nums sm:px-4 sm:text-sm">
-												{formatNumber(page.pageviews)}
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						) : (
-							<EmptyReport message="No pages recorded in this period." />
-						)}
-					</Report>
-
-					<Report
-						title="Acquisition"
-						actions={
-							<div className="flex flex-wrap justify-end gap-x-4 gap-y-1" aria-label="Acquisition dimension">
-								{(['Referrers', 'UTM sources', 'UTM media', 'UTM campaigns'] as const).map((dimension) => (
-									<button
-										type="button"
-										key={dimension}
-										aria-label={dimension}
-										aria-pressed={acquisitionDimension === dimension}
-										className={`${acquisitionDimension === dimension ? 'border-ink text-ink' : 'text-muted border-transparent'} hover:text-ink -mb-3 cursor-pointer border-b-2 pb-3 text-xs font-medium transition-colors`}
-										onClick={() => setAcquisitionDimension(dimension)}
-									>
-										{acquisitionLabels[dimension]}
-									</button>
-								))}
-							</div>
-						}
-					>
-						<RankedList items={acquisition[acquisitionDimension]} label={acquisitionDimension} />
-					</Report>
-				</div>
+				) : (
+					<AvailableTrafficReport
+						overview={overview}
+						acquisition={acquisition}
+						acquisitionDimension={acquisitionDimension}
+						acquisitionLabels={acquisitionLabels}
+						setAcquisitionDimension={setAcquisitionDimension}
+					/>
+				)}
 
 				<details className="border-border mt-8 border-t py-5">
 					<summary className="text-ink cursor-pointer text-sm font-semibold">Install the tracker</summary>
@@ -139,6 +72,107 @@ export default function ShowWebsite({ overview, trackerUrl }: PageProps) {
 					</pre>
 				</details>
 			</main>
+		</>
+	);
+}
+
+function AvailableTrafficReport({
+	overview,
+	acquisition,
+	acquisitionDimension,
+	acquisitionLabels,
+	setAcquisitionDimension,
+}: {
+	overview: Data.Websites.WebsiteOverview;
+	acquisition: Record<AcquisitionDimension, RankedVisitors[]>;
+	acquisitionDimension: AcquisitionDimension;
+	acquisitionLabels: Record<AcquisitionDimension, string>;
+	setAcquisitionDimension: (dimension: AcquisitionDimension) => void;
+}) {
+	return (
+		<>
+			<Card padding="none" className="overflow-hidden">
+				<section className="border-border grid border-b sm:grid-cols-3" aria-label="Visit summary">
+					<Metric label="Pageviews" value={overview.metrics.pageviews} />
+					<Metric label="Visitors" value={overview.metrics.visitors} />
+					<Metric label="Sessions" value={overview.metrics.sessions} />
+				</section>
+
+				<TrendChart
+					id="traffic-heading"
+					title="Traffic"
+					dailyLabel="Daily pageviews"
+					valueLabel="Pageviews"
+					tableCaption="Daily pageviews data"
+					trend={overview.trend.map((day) => ({ date: day.date, value: day.pageviews }))}
+				/>
+			</Card>
+
+			<div className="mt-8 grid gap-5 lg:grid-cols-2">
+				<Report title="Top pages">
+					{overview.topPages.length ? (
+						<table className="w-full table-fixed text-sm">
+							<caption className="sr-only">Top pages</caption>
+							<thead className="bg-surface-muted text-muted text-[10px] font-medium uppercase sm:text-xs">
+								<tr>
+									<th scope="col" className="w-auto px-4 py-2 text-left">
+										Page
+									</th>
+									<th scope="col" className="w-16 px-1 py-2 text-right sm:w-24 sm:px-2">
+										Visitors
+									</th>
+									<th scope="col" className="w-16 px-2 py-2 text-right sm:w-24 sm:px-4">
+										<span className="sm:hidden">Views</span>
+										<span className="hidden sm:inline">Pageviews</span>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{overview.topPages.map((page) => (
+									<tr key={page.name} className="border-border border-t">
+										<th scope="row" className="text-ink p-0 text-left font-normal">
+											<div className="relative flex min-h-11 items-center px-4">
+												<RowBar value={page.pageviews} maximum={overview.topPages[0].pageviews} />
+												<span className="relative truncate">{page.name}</span>
+											</div>
+										</th>
+										<td className="text-muted px-1 text-right text-xs tabular-nums sm:px-2 sm:text-sm">
+											{formatNumber(page.visitors)}
+										</td>
+										<td className="text-ink px-2 text-right text-xs tabular-nums sm:px-4 sm:text-sm">
+											{formatNumber(page.pageviews)}
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					) : (
+						<EmptyReport message="No pages recorded in this period." />
+					)}
+				</Report>
+
+				<Report
+					title="Acquisition"
+					actions={
+						<div className="flex flex-wrap justify-end gap-x-4 gap-y-1" aria-label="Acquisition dimension">
+							{(['Referrers', 'UTM sources', 'UTM media', 'UTM campaigns'] as const).map((dimension) => (
+								<button
+									type="button"
+									key={dimension}
+									aria-label={dimension}
+									aria-pressed={acquisitionDimension === dimension}
+									className={`${acquisitionDimension === dimension ? 'border-ink text-ink' : 'text-muted border-transparent'} hover:text-ink -mb-3 cursor-pointer border-b-2 pb-3 text-xs font-medium transition-colors`}
+									onClick={() => setAcquisitionDimension(dimension)}
+								>
+									{acquisitionLabels[dimension]}
+								</button>
+							))}
+						</div>
+					}
+				>
+					<RankedList items={acquisition[acquisitionDimension]} label={acquisitionDimension} />
+				</Report>
+			</div>
 		</>
 	);
 }

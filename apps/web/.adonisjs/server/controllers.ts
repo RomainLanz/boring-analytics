@@ -21,11 +21,13 @@ export const controllers = {
     Account: () => import('#app/identity/controllers/account_controller'),
     Login: () => import('#app/identity/controllers/login_controller'),
     Logout: () => import('#app/identity/controllers/logout_controller'),
+    OwnerDataExport: () => import('#app/identity/controllers/owner_data_export_controller'),
     RegisterUser: () => import('#app/identity/controllers/register_user_controller'),
   },
   websites: {
     CreateWebsite: () => import('#app/websites/controllers/create_website_controller'),
     UpdateWebsiteIdentityMode: () => import('#app/websites/controllers/update_website_identity_mode_controller'),
+    UpdateWebsiteRetention: () => import('#app/websites/controllers/update_website_retention_controller'),
     Website: () => import('#app/websites/controllers/website_controller'),
     WebsiteEvents: () => import('#app/websites/controllers/website_events_controller'),
   },

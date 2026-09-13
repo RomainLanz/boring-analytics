@@ -15,6 +15,7 @@ export type ScannedRoutes = {
     'session.create': { paramsTuple?: []; params?: {} }
     'session.store': { paramsTuple?: []; params?: {} }
     'account.show': { paramsTuple?: []; params?: {} }
+    'account.export': { paramsTuple?: []; params?: {} }
     'session.destroy': { paramsTuple?: []; params?: {} }
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.store': { paramsTuple?: []; params?: {} }
@@ -24,6 +25,7 @@ export type ScannedRoutes = {
     'server_events.store': { paramsTuple?: []; params?: {} }
     'website_server_keys.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_identity_mode.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_retention.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_server_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'home': { paramsTuple?: []; params?: {} }
@@ -36,6 +38,7 @@ export type ScannedRoutes = {
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
     'account.show': { paramsTuple?: []; params?: {} }
+    'account.export': { paramsTuple?: []; params?: {} }
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -50,6 +53,7 @@ export type ScannedRoutes = {
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
     'account.show': { paramsTuple?: []; params?: {} }
+    'account.export': { paramsTuple?: []; params?: {} }
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -71,6 +75,7 @@ export type ScannedRoutes = {
   }
   PATCH: {
     'website_identity_mode.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_retention.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   DELETE: {
     'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

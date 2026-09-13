@@ -7,6 +7,7 @@ import {
 	type FunnelIdentityKind,
 } from '#funnels/domain/funnel_definition';
 import { TransactionManager } from '#shared/services/transaction_manager';
+import { EventDataAvailabilityQuery, type EventDataAvailability } from '#websites/queries/event_data_availability';
 import { websiteReportPeriod } from '#websites/queries/website_report_period';
 import type { JsonValue } from '#types/db';
 
@@ -18,6 +19,7 @@ export interface FunnelReport {
 		timezone: string;
 	};
 	period: { startDate: string; endDate: string };
+	dataAvailability: EventDataAvailability;
 	funnel: {
 		id: string;
 		name: string;
@@ -55,7 +57,10 @@ interface PersistedStep {
 
 @inject()
 export class FunnelReportQuery {
-	constructor(private readonly transactions: TransactionManager) {}
+	constructor(
+		private readonly transactions: TransactionManager,
+		private readonly eventDataAvailability: EventDataAvailabilityQuery,
+	) {}
 
 	async execute(
 		funnelId: string,
@@ -280,6 +285,7 @@ export class FunnelReportQuery {
 		});
 		const entrants = steps[0]?.entrants ?? 0;
 		const converted = steps.at(-1)?.entrants ?? 0;
+		const dataAvailability = await this.eventDataAvailability.execute(funnel.website_id, ownerUserId, periodStart, now);
 
 		return {
 			website: {
@@ -289,6 +295,7 @@ export class FunnelReportQuery {
 				timezone: funnel.timezone,
 			},
 			period: { startDate, endDate },
+			dataAvailability,
 			funnel: {
 				id: funnel.id,
 				name: funnel.funnel_name,

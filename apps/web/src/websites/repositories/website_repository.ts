@@ -3,6 +3,7 @@ import { inject } from '@adonisjs/core';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import { AllowedDomain } from '#websites/domain/allowed_domain';
 import { parseWebsiteIdentityMode, type WebsiteIdentityMode } from '#websites/website_identity_mode';
+import type { EventRetentionDays } from '#websites/event_retention';
 
 export interface CreatedWebsite {
 	id: string;
@@ -89,5 +90,25 @@ export class WebsiteRepository {
 			.where('id', '=', website.id)
 			.execute();
 		return true;
+	}
+
+	async updateRetentionForOwner(ownerUserId: string, websiteId: string, retentionDays: EventRetentionDays) {
+		const result = await this.transactions
+			.currentDatabase()
+			.updateTable('websites')
+			.set({ retention_days: retentionDays })
+			.where('id', '=', websiteId)
+			.where(
+				'workspace_id',
+				'in',
+				this.transactions
+					.currentDatabase()
+					.selectFrom('workspaces')
+					.select('id')
+					.where('owner_user_id', '=', ownerUserId),
+			)
+			.executeTakeFirst();
+
+		return result.numUpdatedRows === 1n;
 	}
 }

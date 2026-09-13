@@ -72,6 +72,12 @@ const routes = {
     tokens: [{"old":"/account","type":0,"val":"account","end":""}],
     types: placeholder as Registry['account.show']['types'],
   },
+  'account.export': {
+    methods: ["GET","HEAD"],
+    pattern: '/account/export',
+    tokens: [{"old":"/account/export","type":0,"val":"account","end":""},{"old":"/account/export","type":0,"val":"export","end":""}],
+    types: placeholder as Registry['account.export']['types'],
+  },
   'session.destroy': {
     methods: ["POST"],
     pattern: '/logout',
@@ -125,6 +131,12 @@ const routes = {
     pattern: '/websites/:id/identity-mode',
     tokens: [{"old":"/websites/:id/identity-mode","type":0,"val":"websites","end":""},{"old":"/websites/:id/identity-mode","type":1,"val":"id","end":""},{"old":"/websites/:id/identity-mode","type":0,"val":"identity-mode","end":""}],
     types: placeholder as Registry['website_identity_mode.update']['types'],
+  },
+  'website_retention.update': {
+    methods: ["PATCH"],
+    pattern: '/websites/:id/retention',
+    tokens: [{"old":"/websites/:id/retention","type":0,"val":"websites","end":""},{"old":"/websites/:id/retention","type":1,"val":"id","end":""},{"old":"/websites/:id/retention","type":0,"val":"retention","end":""}],
+    types: placeholder as Registry['website_retention.update']['types'],
   },
   'website_server_keys.store': {
     methods: ["POST"],

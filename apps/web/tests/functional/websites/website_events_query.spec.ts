@@ -43,6 +43,7 @@ test.group('Website events query', (group) => {
 		const eventsQuery = await app.container.make(WebsiteEventsQuery);
 		const report = await eventsQuery.execute(website.id, owner.id, 'signup', new Date('2026-03-30T12:00:00.000Z'));
 
+		assert.deepEqual(report?.dataAvailability, { status: 'available' });
 		assert.deepEqual(report?.events, [
 			{ name: 'signup', volume: 3 },
 			{ name: 'checkout_started', volume: 0 },

@@ -19,12 +19,15 @@ test.group('Website server key settings', (group) => {
 		const website = await createWebsite(owner.id);
 		await browserContext.loginAs(owner);
 		const page = await visit(`/websites/${website.id}/settings`);
+		await page.getByRole('button', { name: 'Identity', exact: true }).click();
 		const anonymous = page.getByRole('radio', { name: /Anonymous/u });
 		const product = page.getByRole('radio', { name: /Product/u });
 
 		assert.isTrue(await anonymous.isChecked());
+		await page.getByRole('button', { name: 'Server events', exact: true }).click();
 		assert.notInclude((await page.locator('pre code').textContent()) ?? '', '"distinctId": "opaque-account-42"');
 
+		await page.getByRole('button', { name: 'Identity', exact: true }).click();
 		await product.check();
 		assert.isTrue(await product.isChecked());
 		await page.getByText('New browser and server events must include', { exact: false }).waitFor();
@@ -32,16 +35,18 @@ test.group('Website server key settings', (group) => {
 			page.waitForResponse((response) => response.request().method() === 'PATCH'),
 			page.getByRole('button', { name: 'Save identity mode' }).click(),
 		]);
+		assert.isTrue(await product.isChecked());
+		await page.getByRole('button', { name: 'Server events', exact: true }).click();
 		await page.waitForFunction(() =>
 			document.querySelector('pre code')?.textContent?.includes('"distinctId": "opaque-account-42"'),
 		);
-		assert.isTrue(await product.isChecked());
 		assert.equal(
 			(await db.selectFrom('websites').select('identity_mode').where('id', '=', website.id).executeTakeFirstOrThrow())
 				.identity_mode,
 			'product',
 		);
 
+		await page.getByRole('button', { name: 'Identity', exact: true }).click();
 		await anonymous.check();
 		assert.isTrue(await anonymous.isChecked());
 		await page.getByText('New events must omit Product identity', { exact: false }).waitFor();
@@ -61,6 +66,7 @@ test.group('Website server key settings', (group) => {
 
 		await page.getByRole('link', { name: 'Settings', exact: true }).click();
 		await page.waitForURL(new RegExp(`/websites/${website.id}/settings$`, 'u'));
+		await page.getByRole('button', { name: 'Server events', exact: true }).click();
 		await page.getByRole('button', { name: 'Create server key' }).click();
 		await page.getByText('Your server key has been generated', { exact: true }).waitFor();
 		const secret = (await page.locator('section[aria-labelledby="new-key-title"] code').textContent()) ?? '';
@@ -76,6 +82,7 @@ test.group('Website server key settings', (group) => {
 
 		await page.reload();
 		assert.equal(await page.getByText(secret, { exact: true }).count(), 0);
+		await page.getByRole('button', { name: 'Server events', exact: true }).click();
 		await page.getByText(persisted.prefix, { exact: true }).waitFor();
 
 		await browserContext.loginAs(outsider);
@@ -85,6 +92,7 @@ test.group('Website server key settings', (group) => {
 
 		await browserContext.loginAs(owner);
 		await page.reload();
+		await page.getByRole('button', { name: 'Server events', exact: true }).click();
 		page.once('dialog', (dialog) => dialog.accept());
 		await page.getByRole('button', { name: 'Revoke key' }).click();
 		await page.getByRole('button', { name: 'Create server key' }).waitFor();
@@ -115,6 +123,7 @@ test.group('Website server key settings', (group) => {
 		await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
 		const page = await visit(`/websites/${website.id}/settings`);
 
+		await page.getByRole('button', { name: 'Server events', exact: true }).click();
 		await page.getByRole('button', { name: 'Create server key' }).click();
 		await page.getByText('Your server key has been generated', { exact: true }).waitFor();
 		const originalSecret = (await page.locator('section[aria-labelledby="new-key-title"] code').textContent()) ?? '';
@@ -130,6 +139,39 @@ test.group('Website server key settings', (group) => {
 		assert.notEqual(replacementSecret, originalSecret);
 		await page.getByRole('button', { name: 'Copy secret' }).waitFor();
 		assert.equal(await page.evaluate(() => navigator.clipboard.readText()), originalSecret);
+	});
+});
+
+test.group('Website data controls', (group) => {
+	group.each.setup(async () => {
+		await db.deleteFrom('users').execute();
+	});
+
+	test('updates raw event retention and exposes the owner export', async ({ assert, browserContext, visit }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id);
+		await browserContext.loginAs(owner);
+		const page = await visit(`/websites/${website.id}/settings`);
+
+		await page.getByRole('heading', { name: 'Data controls', exact: true }).waitFor();
+		assert.isTrue(await page.getByRole('radio', { name: '90 days', exact: true }).isChecked());
+		assert.equal(
+			await page.getByRole('link', { name: 'Download JSONL export' }).getAttribute('href'),
+			'/account/export',
+		);
+
+		await page.getByText('180 days', { exact: true }).click();
+		await Promise.all([
+			page.waitForResponse((response) => response.request().method() === 'PATCH'),
+			page.getByRole('button', { name: 'Save retention' }).click(),
+		]);
+
+		assert.equal(
+			(await db.selectFrom('websites').select('retention_days').where('id', '=', website.id).executeTakeFirstOrThrow())
+				.retention_days,
+			180,
+		);
+		assert.isTrue(await page.getByRole('radio', { name: '180 days', exact: true }).isChecked());
 	});
 });
 

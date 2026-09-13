@@ -135,6 +135,9 @@ yarn docker:down
 | `yarn docker:down` | Stop local infrastructure                   |
 | `yarn taze`        | Review dependency updates across workspaces |
 
+Raw event retention, the bounded purge command, host scheduling, and the portable owner export are documented in
+[Data lifecycle](docs/data-lifecycle.md).
+
 Create a user interactively with the `create:user` Ace command:
 
 ```bash

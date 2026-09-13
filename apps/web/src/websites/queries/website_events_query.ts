@@ -1,6 +1,7 @@
 import { inject } from '@adonisjs/core';
 import { sql } from 'kysely';
 import { TransactionManager } from '#shared/services/transaction_manager';
+import { EventDataAvailabilityQuery, type EventDataAvailability } from '#websites/queries/event_data_availability';
 import { websiteReportPeriod } from '#websites/queries/website_report_period';
 import type { EventPropertyValue } from '#collection/browser_event_protocol';
 
@@ -21,6 +22,7 @@ export interface WebsiteEventsReport {
 		startDate: string;
 		endDate: string;
 	};
+	dataAvailability: EventDataAvailability;
 	events: Array<{ name: string; volume: number }>;
 	selectedEvent: {
 		name: string;
@@ -35,7 +37,10 @@ export interface WebsiteEventsReport {
 
 @inject()
 export class WebsiteEventsQuery {
-	constructor(private readonly transactions: TransactionManager) {}
+	constructor(
+		private readonly transactions: TransactionManager,
+		private readonly eventDataAvailability: EventDataAvailabilityQuery,
+	) {}
 
 	async execute(
 		websiteId: string,
@@ -80,6 +85,8 @@ export class WebsiteEventsQuery {
 		const selected = events.find((event) => event.name === selectedName) ?? events[0];
 
 		if (!selected) {
+			const dataAvailability = await this.eventDataAvailability.execute(website.id, ownerUserId, periodStart, now);
+
 			return {
 				website: {
 					id: website.id,
@@ -88,6 +95,7 @@ export class WebsiteEventsQuery {
 					timezone: website.timezone,
 				},
 				period: { startDate, endDate },
+				dataAvailability,
 				events,
 				selectedEvent: null,
 			};
@@ -138,6 +146,7 @@ export class WebsiteEventsQuery {
 			values.push({ value: row.value, count: row.count });
 			properties.set(row.key, values);
 		}
+		const dataAvailability = await this.eventDataAvailability.execute(website.id, ownerUserId, periodStart, now);
 
 		return {
 			website: {
@@ -147,6 +156,7 @@ export class WebsiteEventsQuery {
 				timezone: website.timezone,
 			},
 			period: { startDate, endDate },
+			dataAvailability,
 			events,
 			selectedEvent: {
 				name: selected.name,

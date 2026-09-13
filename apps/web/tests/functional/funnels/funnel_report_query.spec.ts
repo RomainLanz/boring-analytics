@@ -261,6 +261,7 @@ test.group('Funnel report query', (group) => {
 	test('reports the latest mature Product cohorts at the 30-day window limit', async ({ assert }) => {
 		const { ownerUserId, websiteId } = await createWebsite('product');
 		const funnelId = randomUUID();
+		await db.updateTable('websites').set({ retention_days: 60 }).where('id', '=', websiteId).execute();
 		await db
 			.insertInto('funnels')
 			.values({
@@ -292,6 +293,7 @@ test.group('Funnel report query', (group) => {
 		const report = await query.execute(funnelId, websiteId, ownerUserId, new Date('2026-03-30T12:00:00.000Z'));
 
 		assert.deepEqual(report?.period, { startDate: '2026-01-30', endDate: '2026-02-28' });
+		assert.equal(report?.dataAvailability.status, 'unavailable');
 		assert.deepEqual(
 			report?.steps.map(({ entrants }) => entrants),
 			[1, 1],

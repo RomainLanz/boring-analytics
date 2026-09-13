@@ -15,6 +15,7 @@ router
 router
 	.group(() => {
 		router.get('account', [controllers.identity.Account, 'render']).as('account.show');
+		router.get('account/export', [controllers.identity.OwnerDataExport, 'execute']).as('account.export');
 		router.post('logout', [controllers.identity.Logout, 'execute']).as('session.destroy');
 	})
 	.use(webMiddleware)

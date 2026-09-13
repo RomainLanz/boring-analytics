@@ -1,6 +1,7 @@
 import { inject } from '@adonisjs/core';
 import { sql } from 'kysely';
 import { TransactionManager } from '#shared/services/transaction_manager';
+import { EventDataAvailabilityQuery, type EventDataAvailability } from '#websites/queries/event_data_availability';
 import { websiteReportPeriod } from '#websites/queries/website_report_period';
 
 interface RankedVisitors {
@@ -20,6 +21,7 @@ export interface WebsiteOverview {
 		startDate: string;
 		endDate: string;
 	};
+	dataAvailability: EventDataAvailability;
 	metrics: {
 		pageviews: number;
 		visitors: number;
@@ -35,7 +37,10 @@ export interface WebsiteOverview {
 
 @inject()
 export class WebsiteOverviewQuery {
-	constructor(private readonly transactions: TransactionManager) {}
+	constructor(
+		private readonly transactions: TransactionManager,
+		private readonly eventDataAvailability: EventDataAvailabilityQuery,
+	) {}
 
 	async execute(websiteId: string, ownerUserId: string, now = new Date()): Promise<WebsiteOverview | null> {
 		const database = this.transactions.currentDatabase();
@@ -143,6 +148,7 @@ export class WebsiteOverviewQuery {
 
 		const dailyCounts = new Map(dailyPageviews.map((day) => [day.date, day.pageviews]));
 		const trend = dates.map((date) => ({ date, pageviews: dailyCounts.get(date) ?? 0 }));
+		const dataAvailability = await this.eventDataAvailability.execute(website.id, ownerUserId, periodStart, now);
 
 		return {
 			website: {
@@ -153,6 +159,7 @@ export class WebsiteOverviewQuery {
 				timezone: website.timezone,
 			},
 			period: { startDate, endDate },
+			dataAvailability,
 			metrics,
 			trend,
 			topPages,

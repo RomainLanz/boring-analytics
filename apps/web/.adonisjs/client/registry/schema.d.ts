@@ -139,6 +139,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/identity/controllers/account_controller').default['render']>>>
     }
   }
+  'account.export': {
+    methods: ["GET","HEAD"]
+    pattern: '/account/export'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/identity/controllers/owner_data_export_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/identity/controllers/owner_data_export_controller').default['execute']>>>
+    }
+  }
   'session.destroy': {
     methods: ["POST"]
     pattern: '/logout'
@@ -203,24 +215,24 @@ export interface Registry {
     methods: ["POST"]
     pattern: '/api/events'
     types: {
-      body: ExtractBody<InferInput<(typeof import('#app/collection/controllers/record_browser_event_controller').default)['pageviewValidator']>|InferInput<(typeof import('#app/collection/controllers/record_browser_event_controller').default)['customEventValidator']>>
+      body: {}
       paramsTuple: []
       params: {}
-      query: ExtractQuery<InferInput<(typeof import('#app/collection/controllers/record_browser_event_controller').default)['pageviewValidator']>|InferInput<(typeof import('#app/collection/controllers/record_browser_event_controller').default)['customEventValidator']>>
+      query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/record_browser_event_controller').default['execute']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_browser_event_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_browser_event_controller').default['execute']>>>
     }
   }
   'server_events.store': {
     methods: ["POST"]
     pattern: '/api/server/events'
     types: {
-      body: ExtractBody<InferInput<(typeof import('#app/collection/controllers/record_server_event_controller').default)['validator']>>
+      body: {}
       paramsTuple: []
       params: {}
-      query: ExtractQuery<InferInput<(typeof import('#app/collection/controllers/record_server_event_controller').default)['validator']>>
+      query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/record_server_event_controller').default['execute']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_server_event_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_server_event_controller').default['execute']>>>
     }
   }
   'website_server_keys.index': {
@@ -245,6 +257,18 @@ export interface Registry {
       query: ExtractQuery<InferInput<(typeof import('#app/websites/controllers/update_website_identity_mode_controller').default)['validator']>>
       response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/update_website_identity_mode_controller').default['execute']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/update_website_identity_mode_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'website_retention.update': {
+    methods: ["PATCH"]
+    pattern: '/websites/:id/retention'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#app/websites/controllers/update_website_retention_controller').default)['validator']>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#app/websites/controllers/update_website_retention_controller').default)['validator']>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/update_website_retention_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/update_website_retention_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
   'website_server_keys.store': {

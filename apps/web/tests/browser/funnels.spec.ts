@@ -218,6 +218,48 @@ test.group('Funnels', (group) => {
 		await page.getByText('Anonymous sessions', { exact: true }).waitFor();
 		assert.notInclude(await page.getByLabel('Conversion window').locator('option').allTextContents(), '1 hour');
 	});
+
+	test('does not present partial Funnel metrics as an empty report after retention truncation', async ({
+		assert,
+		browserContext,
+		visit,
+	}) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id);
+		const funnelId = randomUUID();
+		await db
+			.updateTable('websites')
+			.set({ identity_mode: 'product', retention_days: 60 })
+			.where('id', '=', website.id)
+			.execute();
+		await db
+			.insertInto('funnels')
+			.values({
+				id: funnelId,
+				website_id: website.id,
+				name: 'Long activation',
+				identity_kind: 'distinct_id',
+				conversion_window_seconds: 30 * 24 * 60 * 60,
+			})
+			.execute();
+		await db
+			.insertInto('funnel_steps')
+			.values([
+				{ funnel_id: funnelId, position: 1, event_name: 'signup', filter: null },
+				{ funnel_id: funnelId, position: 2, event_name: 'activated', filter: null },
+			])
+			.execute();
+
+		await browserContext.loginAs(owner);
+		const page = await visit(`/websites/${website.id}/funnels/${funnelId}`);
+
+		await page.getByRole('heading', { name: 'This report is unavailable' }).waitFor();
+		assert.equal(await page.getByRole('region', { name: 'Funnel summary' }).count(), 0);
+		assert.include(
+			await page.getByText('retention settings', { exact: true }).getAttribute('href'),
+			`/websites/${website.id}/settings`,
+		);
+	});
 });
 
 async function createUser(name: string, email: string) {

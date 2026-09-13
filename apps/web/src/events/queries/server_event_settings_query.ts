@@ -1,5 +1,6 @@
 import { inject } from '@adonisjs/core';
 import { TransactionManager } from '#shared/services/transaction_manager';
+import { parseEventRetentionDays, type EventRetentionDays } from '#websites/event_retention';
 import { websiteReportPeriod } from '#websites/queries/website_report_period';
 import { parseWebsiteIdentityMode, type WebsiteIdentityMode } from '#websites/website_identity_mode';
 import type { ServerKeyMetadata } from '#collection/repositories/server_key_repository';
@@ -11,6 +12,7 @@ export interface ServerEventSettings {
 		allowedDomain: string;
 		timezone: string;
 		identityMode: WebsiteIdentityMode;
+		retentionDays: EventRetentionDays;
 	};
 	period: { startDate: string; endDate: string };
 	serverKey: ServerKeyMetadata | null;
@@ -31,6 +33,7 @@ export class ServerEventSettingsQuery {
 				'websites.allowed_domain',
 				'websites.timezone',
 				'websites.identity_mode',
+				'websites.retention_days',
 			])
 			.where('websites.id', '=', websiteId)
 			.where('workspaces.owner_user_id', '=', ownerUserId)
@@ -55,6 +58,7 @@ export class ServerEventSettingsQuery {
 				allowedDomain: website.allowed_domain,
 				timezone: website.timezone,
 				identityMode: parseWebsiteIdentityMode(website.identity_mode),
+				retentionDays: parseEventRetentionDays(website.retention_days),
 			},
 			period: { startDate, endDate },
 			serverKey: key ? { id: key.id, prefix: key.prefix, createdAt: key.created_at, revokedAt: key.revoked_at } : null,

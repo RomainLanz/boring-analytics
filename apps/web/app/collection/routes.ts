@@ -30,6 +30,10 @@ router
 			.where('id', router.matchers.uuid())
 			.as('website_identity_mode.update');
 		router
+			.patch('/websites/:id/retention', [controllers.websites.UpdateWebsiteRetention, 'execute'])
+			.where('id', router.matchers.uuid())
+			.as('website_retention.update');
+		router
 			.post('/websites/:id/server-key', [controllers.collection.CreateServerKey, 'execute'])
 			.where('id', router.matchers.uuid())
 			.as('website_server_keys.store');

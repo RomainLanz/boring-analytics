@@ -2,6 +2,7 @@ import { Button } from '@boring-analytics/design-system/button';
 import { Card } from '@boring-analytics/design-system/card';
 import { type Data } from '@generated/data';
 import { Head, Link } from '@inertiajs/react';
+import { ReportDataUnavailable } from '~/components/report-data-unavailable';
 import { WebsiteReportHeader } from '~/components/website-report-header';
 import { type InertiaProps } from '~/types';
 
@@ -21,71 +22,96 @@ export default function FunnelReport({ report }: PageProps) {
 						<Link href={`/websites/${report.website.id}/funnels/${report.funnel.id}/edit`}>Edit Funnel</Link>
 					</Button>
 				</WebsiteReportHeader>
-				<Card padding="none" className="overflow-hidden">
-					<header className="border-border flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-						<div>
-							<h2 className="text-ink text-base font-bold">{report.funnel.name}</h2>
-							<p className="text-muted mt-0.5 text-xs">
-								{identityLabel} · {formatWindow(report.funnel.conversionWindowSeconds)}
-							</p>
-						</div>
-						<span className="bg-accent-soft text-accent w-fit rounded-full px-2.5 py-1 text-xs font-semibold">
-							Mature cohorts only
-						</span>
-					</header>
-					<section className="border-border grid grid-cols-2 border-b lg:grid-cols-4" aria-label="Funnel summary">
-						<Metric label="Entrants" value={formatNumber(report.summary.entrants)} detail={identityUnit} />
-						<Metric label="Converted" value={formatNumber(report.summary.converted)} detail={identityUnit} />
-						<Metric label="Conversion" value={formatPercent(report.summary.conversionRate)} detail="Overall" />
-						<Metric label="Drop-offs" value={formatNumber(report.summary.totalDropoffs)} detail={identityUnit} />
-					</section>
-					{maximum === 0 ? (
-						<p className="border-border bg-surface-muted text-muted border-b px-5 py-4 text-sm">
-							No mature {identityLabel.toLowerCase()} entered this Funnel during this period.
-						</p>
-					) : null}
-					<div className="p-4 sm:p-6">
-						<div className="text-muted hidden grid-cols-[minmax(9rem,1fr)_minmax(10rem,2fr)_6rem_6rem_6rem_7rem] gap-4 pb-2 text-[10px] font-semibold tracking-wide uppercase lg:grid">
-							<span>Step</span>
-							<span>Share of entrants</span>
-							<span className="text-right">Entered</span>
-							<span className="text-right">Step rate</span>
-							<span className="text-right">Drop-offs</span>
-							<span className="text-right">Median time</span>
-						</div>
-						<ol>
-							{report.steps.map((step) => (
-								<li
-									key={step.position}
-									className="border-border grid gap-3 border-t py-4 lg:grid-cols-[minmax(9rem,1fr)_minmax(10rem,2fr)_6rem_6rem_6rem_7rem] lg:items-center lg:gap-4"
-								>
-									<div className="min-w-0">
-										<strong className="text-ink block truncate text-sm">
-											{step.position}. {step.eventName}
-										</strong>
-										<span className="text-muted mt-1 block truncate text-xs">{formatFilter(step.filter)}</span>
-									</div>
-									<div className="bg-surface-muted h-7 overflow-hidden rounded-md">
-										<span
-											className="bg-accent flex h-full min-w-0 items-center rounded-md px-2 text-xs font-semibold text-white"
-											style={{
-												width: `${maximum ? Math.max((step.entrants / maximum) * 100, step.entrants ? 3 : 0) : 0}%`,
-											}}
-										>
-											{step.entrants ? formatPercent(step.entrants / maximum) : ''}
-										</span>
-									</div>
-									<Stat label="Entered" value={formatNumber(step.entrants)} />
-									<Stat label="Step rate" value={formatPercent(step.stepRate)} />
-									<Stat label="Drop-offs" value={step.dropoffs === null ? '—' : formatNumber(step.dropoffs)} />
-									<Stat label="Median time" value={formatDuration(step.medianTimeFromPreviousSeconds)} />
-								</li>
-							))}
-						</ol>
-					</div>
-				</Card>
+				{report.dataAvailability.status === 'unavailable' ? (
+					<ReportDataUnavailable availableFrom={report.dataAvailability.availableFrom} websiteId={report.website.id} />
+				) : (
+					<AvailableFunnelReport
+						report={report}
+						maximum={maximum}
+						identityLabel={identityLabel}
+						identityUnit={identityUnit}
+					/>
+				)}
 			</main>
 		</>
+	);
+}
+
+function AvailableFunnelReport({
+	report,
+	maximum,
+	identityLabel,
+	identityUnit,
+}: {
+	report: Data.Funnels.FunnelReport;
+	maximum: number;
+	identityLabel: string;
+	identityUnit: string;
+}) {
+	return (
+		<Card padding="none" className="overflow-hidden">
+			<header className="border-border flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<h2 className="text-ink text-base font-bold">{report.funnel.name}</h2>
+					<p className="text-muted mt-0.5 text-xs">
+						{identityLabel} · {formatWindow(report.funnel.conversionWindowSeconds)}
+					</p>
+				</div>
+				<span className="bg-accent-soft text-accent w-fit rounded-full px-2.5 py-1 text-xs font-semibold">
+					Mature cohorts only
+				</span>
+			</header>
+			<section className="border-border grid grid-cols-2 border-b lg:grid-cols-4" aria-label="Funnel summary">
+				<Metric label="Entrants" value={formatNumber(report.summary.entrants)} detail={identityUnit} />
+				<Metric label="Converted" value={formatNumber(report.summary.converted)} detail={identityUnit} />
+				<Metric label="Conversion" value={formatPercent(report.summary.conversionRate)} detail="Overall" />
+				<Metric label="Drop-offs" value={formatNumber(report.summary.totalDropoffs)} detail={identityUnit} />
+			</section>
+			{maximum === 0 ? (
+				<p className="border-border bg-surface-muted text-muted border-b px-5 py-4 text-sm">
+					No mature {identityLabel.toLowerCase()} entered this Funnel during this period.
+				</p>
+			) : null}
+			<div className="p-4 sm:p-6">
+				<div className="text-muted hidden grid-cols-[minmax(9rem,1fr)_minmax(10rem,2fr)_6rem_6rem_6rem_7rem] gap-4 pb-2 text-[10px] font-semibold tracking-wide uppercase lg:grid">
+					<span>Step</span>
+					<span>Share of entrants</span>
+					<span className="text-right">Entered</span>
+					<span className="text-right">Step rate</span>
+					<span className="text-right">Drop-offs</span>
+					<span className="text-right">Median time</span>
+				</div>
+				<ol>
+					{report.steps.map((step) => (
+						<li
+							key={step.position}
+							className="border-border grid gap-3 border-t py-4 lg:grid-cols-[minmax(9rem,1fr)_minmax(10rem,2fr)_6rem_6rem_6rem_7rem] lg:items-center lg:gap-4"
+						>
+							<div className="min-w-0">
+								<strong className="text-ink block truncate text-sm">
+									{step.position}. {step.eventName}
+								</strong>
+								<span className="text-muted mt-1 block truncate text-xs">{formatFilter(step.filter)}</span>
+							</div>
+							<div className="bg-surface-muted h-7 overflow-hidden rounded-md">
+								<span
+									className="bg-accent flex h-full min-w-0 items-center rounded-md px-2 text-xs font-semibold text-white"
+									style={{
+										width: `${maximum ? Math.max((step.entrants / maximum) * 100, step.entrants ? 3 : 0) : 0}%`,
+									}}
+								>
+									{step.entrants ? formatPercent(step.entrants / maximum) : ''}
+								</span>
+							</div>
+							<Stat label="Entered" value={formatNumber(step.entrants)} />
+							<Stat label="Step rate" value={formatPercent(step.stepRate)} />
+							<Stat label="Drop-offs" value={step.dropoffs === null ? '—' : formatNumber(step.dropoffs)} />
+							<Stat label="Median time" value={formatDuration(step.medianTimeFromPreviousSeconds)} />
+						</li>
+					))}
+				</ol>
+			</div>
+		</Card>
 	);
 }
 

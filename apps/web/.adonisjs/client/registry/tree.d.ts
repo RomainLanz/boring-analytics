@@ -21,6 +21,7 @@ export interface ApiDefinition {
   }
   account: {
     show: typeof routes['account.show']
+    export: typeof routes['account.export']
   }
   websites: {
     create: typeof routes['websites.create']
@@ -41,6 +42,9 @@ export interface ApiDefinition {
   }
   websiteIdentityMode: {
     update: typeof routes['website_identity_mode.update']
+  }
+  websiteRetention: {
+    update: typeof routes['website_retention.update']
   }
   home: typeof routes['home']
 }
