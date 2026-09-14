@@ -70,7 +70,7 @@ test.group('Website overview query', (group) => {
 		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
 		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-03-30T12:00:00.000Z'));
 
-		assert.deepEqual(overview, {
+		assert.deepInclude(overview, {
 			website: {
 				id: website.id,
 				name: 'Boring Money',
@@ -79,8 +79,10 @@ test.group('Website overview query', (group) => {
 				timezone: 'Europe/Zurich',
 			},
 			period: {
+				preset: 30,
 				startDate: '2026-03-01',
 				endDate: '2026-03-30',
+				previous: { startDate: '2026-01-30', endDate: '2026-02-28' },
 			},
 			dataAvailability: { status: 'available' },
 			metrics: { pageviews: 3, visitors: 2 },
@@ -108,6 +110,77 @@ test.group('Website overview query', (group) => {
 			utmCampaigns: [{ name: 'spring-launch', visitors: 1 }],
 		});
 		assert.isNull(await overviewQuery.execute(website.id, outsider.id, new Date('2026-03-30T12:00:00.000Z')));
+	});
+
+	test('compares a selected 7-day period with the preceding 7 Website-local dates', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		const previousLong = randomUUID();
+		const previousBounce = randomUUID();
+		const currentShort = randomUUID();
+		const currentLong = randomUUID();
+
+		await db.updateTable('websites').set({ timezone: 'Europe/Zurich' }).where('id', '=', website.id).execute();
+		await db
+			.insertInto('events')
+			.values([
+				pageview(website.id, '2026-03-26T10:00:00.000Z', {
+					anonymousId: 'previous-a',
+					sessionId: previousLong,
+				}),
+				pageview(website.id, '2026-03-26T10:00:10.000Z', {
+					anonymousId: 'previous-a',
+					sessionId: previousLong,
+				}),
+				pageview(website.id, '2026-03-27T10:00:00.000Z', {
+					anonymousId: 'previous-b',
+					sessionId: previousBounce,
+				}),
+				pageview(website.id, '2026-04-02T10:00:00.000Z', {
+					anonymousId: 'current-a',
+					sessionId: currentShort,
+				}),
+				pageview(website.id, '2026-04-02T10:00:20.000Z', {
+					anonymousId: 'current-a',
+					sessionId: currentShort,
+				}),
+				pageview(website.id, '2026-04-03T10:00:00.000Z', {
+					anonymousId: 'current-a',
+					sessionId: currentLong,
+				}),
+				pageview(website.id, '2026-04-03T10:01:40.000Z', {
+					anonymousId: 'current-a',
+					sessionId: currentLong,
+				}),
+			])
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-04-08T12:00:00.000Z'), 7);
+
+		assert.deepInclude(overview?.period, {
+			preset: 7,
+			startDate: '2026-04-02',
+			endDate: '2026-04-08',
+			previous: { startDate: '2026-03-26', endDate: '2026-04-01' },
+		});
+		assert.deepEqual(overview?.metrics, { pageviews: 4, visitors: 1 });
+		assert.deepEqual(overview?.sessionMetrics, {
+			status: 'available',
+			sessions: 2,
+			bounceRate: 0,
+			medianDurationSeconds: 60,
+		});
+		assert.deepInclude(overview?.comparison, {
+			status: 'available',
+			metrics: { pageviews: 3, visitors: 2 },
+			sessionMetrics: {
+				status: 'available',
+				sessions: 2,
+				bounceRate: 50,
+				medianDurationSeconds: 5,
+			},
+		});
 	});
 
 	test('starts the period at the first instant of its Website-local date', async ({ assert }) => {
@@ -312,14 +385,95 @@ test.group('Website overview query', (group) => {
 		assert.deepEqual(product?.sessionMetrics, { status: 'unavailable', reason: 'product_mode' });
 	});
 
+	test('keeps the current period when only the previous period has expired', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		await db
+			.updateTable('websites')
+			.set({ retention_days: 60, events_available_from: null })
+			.where('id', '=', website.id)
+			.execute();
+		await db
+			.insertInto('events')
+			.values(
+				pageview(website.id, '2026-03-20T12:00:00.000Z', {
+					anonymousId: 'current-visitor',
+					sessionId: randomUUID(),
+				}),
+			)
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-04-01T12:00:00.000Z'));
+
+		assert.deepEqual(overview?.dataAvailability, { status: 'available' });
+		assert.deepEqual(overview?.metrics, { pageviews: 1, visitors: 1 });
+		assert.deepEqual(overview?.comparison, {
+			status: 'unavailable',
+			availableFrom: '2026-02-01T12:00:00.000Z',
+		});
+	});
+
+	test('evaluates session retention with an extra inactivity window for each period', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		await db
+			.updateTable('websites')
+			.set({ retention_days: null, events_available_from: new Date('2026-01-31T23:45:00.000Z') })
+			.where('id', '=', website.id)
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-04-01T12:00:00.000Z'));
+
+		assert.deepEqual(overview?.dataAvailability, { status: 'available' });
+		assert.equal(overview?.comparison.status, 'available');
+
+		if (overview?.comparison.status === 'available') {
+			assert.deepEqual(overview.comparison.sessionMetrics, { status: 'unavailable', reason: 'retention' });
+		}
+	});
+
+	test('does not expose partial current-period data as an available zero', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		await db
+			.updateTable('websites')
+			.set({ retention_days: null, events_available_from: new Date('2026-03-10T00:00:00.000Z') })
+			.where('id', '=', website.id)
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-04-01T12:00:00.000Z'));
+
+		assert.deepEqual(overview?.dataAvailability, {
+			status: 'unavailable',
+			availableFrom: '2026-03-10T00:00:00.000Z',
+		});
+	});
+
 	test('excludes active sessions from bounce and duration while still counting them', async ({ assert }) => {
 		const owner = await createUser('Ada', 'ada@example.com');
 		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
 		const completed = randomUUID();
 		const active = randomUUID();
+		const previousCompleted = randomUUID();
+		const previousActive = randomUUID();
 		await db
 			.insertInto('events')
 			.values([
+				pageview(website.id, '2026-02-28T23:30:00.000Z', {
+					anonymousId: 'previous-completed-visitor',
+					sessionId: previousCompleted,
+				}),
+				pageview(website.id, '2026-02-28T23:20:00.000Z', {
+					anonymousId: 'previous-active-visitor',
+					sessionId: previousActive,
+				}),
+				pageview(website.id, '2026-02-28T23:30:01.000Z', {
+					anonymousId: 'previous-active-visitor',
+					sessionId: previousActive,
+				}),
 				pageview(website.id, '2026-03-30T11:30:00.000Z', {
 					anonymousId: 'completed-visitor',
 					sessionId: completed,
@@ -344,6 +498,16 @@ test.group('Website overview query', (group) => {
 			bounceRate: 100,
 			medianDurationSeconds: 0,
 		});
+		assert.equal(overview?.comparison.status, 'available');
+
+		if (overview?.comparison.status === 'available') {
+			assert.deepEqual(overview.comparison.sessionMetrics, {
+				status: 'available',
+				sessions: 2,
+				bounceRate: 100,
+				medianDurationSeconds: 0,
+			});
+		}
 	});
 });
 

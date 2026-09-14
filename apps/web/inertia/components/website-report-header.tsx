@@ -24,7 +24,7 @@ export function WebsiteReportHeader({ website, period, activeReport, children }:
 						{website.allowedDomain} · {website.timezone}
 					</p>
 				</div>
-				<div className="flex items-center gap-2">
+				<div className="flex flex-wrap items-center gap-2 sm:justify-end">
 					<span className="border-border bg-surface text-ink rounded-control border px-3 py-2 text-sm font-medium">
 						{formatPeriod(period.startDate, period.endDate)}
 					</span>

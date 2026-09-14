@@ -34,10 +34,12 @@ test.group('Websites', (group) => {
 		await createPage.getByRole('button', { name: 'Add website' }).click();
 		await createPage.waitForURL(/\/websites\/[0-9a-f-]+$/u);
 		await createPage.assertText('h1', 'Boring Money');
-		await createPage.assertText('section[aria-label="Visit summary"] > div:first-child p:last-child', '0');
-		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(3) p:last-child', '0');
-		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(4) p:last-child', '—');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:first-child p:nth-child(2)', '0');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(3) p:nth-child(2)', '0');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(4) p:nth-child(2)', '—');
 		await createPage.getByText('Median session duration', { exact: true }).waitFor();
+		await createPage.getByRole('navigation', { name: 'Traffic period' }).locator('[aria-current="page"]').waitFor();
+		await createPage.locator('[aria-label="Traffic periods"]').waitFor();
 		const emptyScale = createPage.locator('[data-chart-scale] span');
 		assert.equal(await emptyScale.count(), 1);
 		assert.equal(await emptyScale.textContent(), '0');
@@ -104,11 +106,12 @@ test.group('Websites', (group) => {
 			])
 			.execute();
 		await createPage.reload();
-		await createPage.assertText('section[aria-label="Visit summary"] > div:first-child p:last-child', '3');
-		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(2) p:last-child', '2');
-		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(3) p:last-child', '2');
-		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(4) p:last-child', '50.0%');
-		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(5) p:last-child', '2m 30s');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:first-child p:nth-child(2)', '3');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(2) p:nth-child(2)', '2');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(3) p:nth-child(2)', '2');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(4) p:nth-child(2)', '50.0%');
+		await createPage.assertText('section[aria-label="Visit summary"] > div:nth-child(5) p:nth-child(2)', '2m 30s');
+		await createPage.getByText('New vs previous 30 days', { exact: true }).first().waitFor();
 		const populatedScale = createPage.locator('[data-chart-scale] span');
 		assert.equal(await populatedScale.count(), 3);
 		assert.deepEqual(await populatedScale.allTextContents(), ['4', '2', '0']);
@@ -117,6 +120,14 @@ test.group('Websites', (group) => {
 		assert.equal(await dailyData.locator('tbody tr').count(), 30);
 		assert.equal(await dailyData.locator('tbody tr:first-child td:last-child').textContent(), '0');
 		assert.equal(await dailyData.locator('tbody tr:last-child td:last-child').textContent(), '3');
+		const periodNavigation = createPage.getByRole('navigation', { name: 'Traffic period' });
+		await periodNavigation.getByRole('link', { name: '7 days' }).click();
+		await createPage.waitForURL(/\?period=7$/u);
+		assert.equal(await dailyData.locator('tbody tr').count(), 7);
+		assert.equal(await periodNavigation.locator('[aria-current="page"]').textContent(), '7 days');
+		await createPage.goto(new URL(`/websites/${website.id}?period=invalid`, createPage.url()).href);
+		assert.equal(await dailyData.locator('tbody tr').count(), 30);
+		assert.equal(await periodNavigation.locator('[aria-current="page"]').textContent(), '30 days');
 		const topPages = createPage.getByRole('table', { name: 'Top pages' });
 		await topPages.getByRole('columnheader', { name: 'Page', exact: true }).waitFor();
 		await topPages.getByRole('columnheader', { name: 'Visitors', exact: true }).waitFor();
@@ -139,6 +150,31 @@ test.group('Websites', (group) => {
   src="http://localhost:3333/tracker.js"
 ></script>`,
 		);
+
+		await db
+			.updateTable('websites')
+			.set({ retention_days: null, events_available_from: new Date(now - 45 * 24 * 60 * 60 * 1_000) })
+			.where('id', '=', website.id)
+			.execute();
+		await createPage.reload();
+		await createPage.assertText('section[aria-label="Visit summary"] > div:first-child p:nth-child(2)', '3');
+		assert.equal(await createPage.getByText('Previous period unavailable', { exact: true }).count(), 5);
+		assert.equal(await createPage.locator('[aria-label="Traffic periods"]').count(), 0);
+
+		await db
+			.updateTable('websites')
+			.set({ events_available_from: new Date(now - 10 * 24 * 60 * 60 * 1_000) })
+			.where('id', '=', website.id)
+			.execute();
+		await createPage.reload();
+		await createPage.getByRole('heading', { name: 'This report is unavailable' }).waitFor();
+		assert.equal(await createPage.getByRole('region', { name: 'Visit summary' }).count(), 0);
+
+		await db
+			.updateTable('websites')
+			.set({ retention_days: 90, events_available_from: null })
+			.where('id', '=', website.id)
+			.execute();
 		await createPage.getByRole('link', { name: 'Events', exact: true }).click();
 		await createPage.waitForURL(/\/websites\/[0-9a-f-]+\/events$/u);
 		const knownEvents = createPage.getByRole('table', { name: 'Known custom events' });

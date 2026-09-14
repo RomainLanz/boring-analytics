@@ -3,6 +3,7 @@ import { Card } from '@boring-analytics/design-system/card';
 import { type Data } from '@generated/data';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
+import { metricChange, percentagePointChange, type TrafficMetricChange } from '#websites/traffic_metric_change';
 import { ReportDataUnavailable } from '~/components/report-data-unavailable';
 import { TrendChart } from '~/components/trend-chart';
 import { WebsiteReportHeader } from '~/components/website-report-header';
@@ -41,6 +42,23 @@ export default function ShowWebsite({ overview, trackerUrl }: PageProps) {
 			<Head title={overview.website.name} />
 			<main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
 				<WebsiteReportHeader website={overview.website} period={overview.period} activeReport="traffic">
+					<nav className="flex items-center gap-1" aria-label="Traffic period">
+						{([7, 30, 90] as const).map((days) => (
+							<Button
+								key={days}
+								asChild
+								intent={overview.period.preset === days ? 'primary' : 'secondary'}
+								size="small"
+							>
+								<Link
+									href={`/websites/${overview.website.id}?period=${days}`}
+									aria-current={overview.period.preset === days ? 'page' : undefined}
+								>
+									{days} days
+								</Link>
+							</Button>
+						))}
+					</nav>
 					<Button asChild intent="secondary" size="small">
 						<Link href="/websites/new">Add website</Link>
 					</Button>
@@ -92,37 +110,7 @@ function AvailableTrafficReport({
 	return (
 		<>
 			<Card padding="none" className="overflow-hidden">
-				<section className="border-border grid border-b sm:grid-cols-2 lg:grid-cols-5" aria-label="Visit summary">
-					<Metric className="border-b sm:border-r lg:border-b-0" label="Pageviews" value={overview.metrics.pageviews} />
-					<Metric className="border-b lg:border-r lg:border-b-0" label="Visitors" value={overview.metrics.visitors} />
-					<Metric
-						className="border-b sm:border-r lg:border-b-0"
-						label="Sessions"
-						value={overview.sessionMetrics.status === 'available' ? overview.sessionMetrics.sessions : 'Unavailable'}
-					/>
-					<Metric
-						className="border-b lg:border-r lg:border-b-0"
-						label="Bounce rate"
-						value={
-							overview.sessionMetrics.status === 'available' && overview.sessionMetrics.bounceRate !== null
-								? `${overview.sessionMetrics.bounceRate.toFixed(1)}%`
-								: overview.sessionMetrics.status === 'available'
-									? '—'
-									: 'Unavailable'
-						}
-					/>
-					<Metric
-						className="sm:col-span-2 lg:col-span-1"
-						label="Median session duration"
-						value={
-							overview.sessionMetrics.status === 'available' && overview.sessionMetrics.medianDurationSeconds !== null
-								? formatDuration(overview.sessionMetrics.medianDurationSeconds)
-								: overview.sessionMetrics.status === 'available'
-									? '—'
-									: 'Unavailable'
-						}
-					/>
-				</section>
+				<VisitSummary overview={overview} />
 				{overview.sessionMetrics.status === 'unavailable' ? (
 					<p className="border-border bg-surface-muted text-muted border-b px-5 py-3 text-xs">
 						{overview.sessionMetrics.reason === 'product_mode'
@@ -144,6 +132,11 @@ function AvailableTrafficReport({
 					valueLabel="Pageviews"
 					tableCaption="Daily pageviews data"
 					trend={overview.trend.map((day) => ({ date: day.date, value: day.pageviews }))}
+					comparisonTrend={
+						overview.comparison.status === 'available'
+							? overview.comparison.trend.map((day) => ({ date: day.date, value: day.pageviews }))
+							: undefined
+					}
 				/>
 			</Card>
 
@@ -216,15 +209,153 @@ function AvailableTrafficReport({
 	);
 }
 
-function Metric({ className, label, value }: { className?: string; label: string; value: number | string }) {
+function VisitSummary({ overview }: { overview: Data.Websites.WebsiteOverview }) {
+	const previousPeriodUnavailable = overview.comparison.status === 'unavailable';
+	const previousMetrics = overview.comparison.status === 'available' ? overview.comparison.metrics : null;
+
+	return (
+		<section className="border-border grid border-b sm:grid-cols-2 lg:grid-cols-5" aria-label="Visit summary">
+			<Metric
+				className="border-b sm:border-r lg:border-b-0"
+				label="Pageviews"
+				value={overview.metrics.pageviews}
+				change={metricChange(overview.metrics.pageviews, previousMetrics?.pageviews ?? null)}
+				periodDays={overview.period.preset}
+				previousPeriodUnavailable={previousPeriodUnavailable}
+			/>
+			<Metric
+				className="border-b lg:border-r lg:border-b-0"
+				label="Visitors"
+				value={overview.metrics.visitors}
+				change={metricChange(overview.metrics.visitors, previousMetrics?.visitors ?? null)}
+				periodDays={overview.period.preset}
+				previousPeriodUnavailable={previousPeriodUnavailable}
+			/>
+			<SessionMetricSummary overview={overview} previousPeriodUnavailable={previousPeriodUnavailable} />
+		</section>
+	);
+}
+
+function SessionMetricSummary({
+	overview,
+	previousPeriodUnavailable,
+}: {
+	overview: Data.Websites.WebsiteOverview;
+	previousPeriodUnavailable: boolean;
+}) {
+	const previousSessionMetrics =
+		overview.comparison.status === 'available' && overview.comparison.sessionMetrics.status === 'available'
+			? overview.comparison.sessionMetrics
+			: null;
+	const currentSessionMetrics = overview.sessionMetrics.status === 'available' ? overview.sessionMetrics : null;
+	const currentBounceRate = currentSessionMetrics?.bounceRate ?? null;
+	const previousBounceRate = previousSessionMetrics?.bounceRate ?? null;
+	const currentMedianDuration = currentSessionMetrics?.medianDurationSeconds ?? null;
+	const previousMedianDuration = previousSessionMetrics?.medianDurationSeconds ?? null;
+
+	return (
+		<>
+			<Metric
+				className="border-b sm:border-r lg:border-b-0"
+				label="Sessions"
+				value={currentSessionMetrics?.sessions ?? 'Unavailable'}
+				change={metricChange(currentSessionMetrics?.sessions ?? null, previousSessionMetrics?.sessions ?? null)}
+				periodDays={overview.period.preset}
+				previousPeriodUnavailable={previousPeriodUnavailable}
+			/>
+			<Metric
+				className="border-b lg:border-r lg:border-b-0"
+				label="Bounce rate"
+				value={formatBounceRate(currentSessionMetrics)}
+				change={percentagePointChange(currentBounceRate, previousBounceRate)}
+				changeUnit="points"
+				periodDays={overview.period.preset}
+				previousPeriodUnavailable={previousPeriodUnavailable}
+			/>
+			<Metric
+				className="sm:col-span-2 lg:col-span-1"
+				label="Median session duration"
+				value={formatMedianDuration(currentSessionMetrics)}
+				change={metricChange(currentMedianDuration, previousMedianDuration)}
+				periodDays={overview.period.preset}
+				previousPeriodUnavailable={previousPeriodUnavailable}
+			/>
+		</>
+	);
+}
+
+function formatBounceRate(metrics: { bounceRate: number | null } | null) {
+	if (!metrics) {
+		return 'Unavailable';
+	}
+
+	return metrics.bounceRate === null ? '—' : `${metrics.bounceRate.toFixed(1)}%`;
+}
+
+function formatMedianDuration(metrics: { medianDurationSeconds: number | null } | null) {
+	if (!metrics) {
+		return 'Unavailable';
+	}
+
+	return metrics.medianDurationSeconds === null ? '—' : formatDuration(metrics.medianDurationSeconds);
+}
+
+function Metric({
+	className,
+	label,
+	value,
+	change,
+	changeUnit = 'percent',
+	periodDays,
+	previousPeriodUnavailable,
+}: {
+	className?: string;
+	label: string;
+	value: number | string;
+	change: TrafficMetricChange;
+	changeUnit?: 'percent' | 'points';
+	periodDays: number;
+	previousPeriodUnavailable: boolean;
+}) {
 	return (
 		<div className={`border-border px-5 py-4 ${className ?? ''}`}>
 			<p className="text-muted text-xs font-medium uppercase">{label}</p>
 			<p className="text-ink mt-1 text-2xl font-bold tracking-tight tabular-nums">
 				{typeof value === 'number' ? formatNumber(value) : value}
 			</p>
+			<p className="text-muted mt-1 min-h-8 text-xs leading-4">
+				{formatMetricChange(change, changeUnit, periodDays, previousPeriodUnavailable)}
+			</p>
 		</div>
 	);
+}
+
+function formatMetricChange(
+	change: TrafficMetricChange,
+	unit: 'percent' | 'points',
+	periodDays: number,
+	previousPeriodUnavailable: boolean,
+) {
+	if (previousPeriodUnavailable) {
+		return 'Previous period unavailable';
+	}
+
+	if (change.status === 'unavailable') {
+		return 'Comparison unavailable';
+	}
+
+	if (change.status === 'unchanged') {
+		return `No change vs previous ${periodDays} days`;
+	}
+
+	if (change.status === 'new') {
+		return `New vs previous ${periodDays} days`;
+	}
+
+	const arrow = change.status === 'increase' ? '↑' : '↓';
+	const amount = changeAmountFormatter.format(change.amount);
+	const suffix = unit === 'points' ? ` ${change.amount === 1 ? 'point' : 'points'}` : '%';
+	return `${arrow} ${amount}${suffix} vs previous ${periodDays} days`;
 }
 
 function Report({ title, actions, children }: { title: string; actions?: React.ReactNode; children: React.ReactNode }) {
@@ -291,6 +422,7 @@ function EmptyReport({ message }: { message: string }) {
 }
 
 const numberFormatter = new Intl.NumberFormat('en');
+const changeAmountFormatter = new Intl.NumberFormat('en', { maximumFractionDigits: 1 });
 
 function formatNumber(value: number) {
 	return numberFormatter.format(value);
