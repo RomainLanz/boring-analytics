@@ -9,7 +9,6 @@ export const controllers = {
     RecordBrowserEvent: () => import('#app/collection/controllers/record_browser_event_controller'),
     RecordServerEvent: () => import('#app/collection/controllers/record_server_event_controller'),
     RevokeServerKey: () => import('#app/collection/controllers/revoke_server_key_controller'),
-    ServerEventSettings: () => import('#app/collection/controllers/server_event_settings_controller'),
   },
   funnels: {
     CreateFunnel: () => import('#app/funnels/controllers/create_funnel_controller'),
@@ -29,10 +28,15 @@ export const controllers = {
     Readiness: () => import('#app/shared/controllers/readiness_controller'),
   },
   websites: {
+    AddAllowedDomain: () => import('#app/websites/controllers/add_allowed_domain_controller'),
+    CreateCollectionKey: () => import('#app/websites/controllers/create_collection_key_controller'),
     CreateWebsite: () => import('#app/websites/controllers/create_website_controller'),
+    RemoveAllowedDomain: () => import('#app/websites/controllers/remove_allowed_domain_controller'),
+    RevokeCollectionKey: () => import('#app/websites/controllers/revoke_collection_key_controller'),
     UpdateWebsiteIdentityMode: () => import('#app/websites/controllers/update_website_identity_mode_controller'),
     UpdateWebsiteRetention: () => import('#app/websites/controllers/update_website_retention_controller'),
     Website: () => import('#app/websites/controllers/website_controller'),
     WebsiteEvents: () => import('#app/websites/controllers/website_events_controller'),
+    WebsiteSettings: () => import('#app/websites/controllers/website_settings_controller'),
   },
 }

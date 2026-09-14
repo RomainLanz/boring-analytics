@@ -19,6 +19,15 @@ test.group('Owner data export', (group) => {
 		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
 		const secondWebsite = await createWebsite(owner.id, 'Documentation', 'docs.boring.money');
 		const outsiderWebsite = await createWebsite(outsider.id, 'Private', 'private.example.com');
+		const rotatedCollectionKey = randomUUID();
+		await db
+			.insertInto('website_allowed_domains')
+			.values({ id: randomUUID(), website_id: website.id, hostname: 'shop.boring.money' })
+			.execute();
+		await db
+			.insertInto('website_collection_keys')
+			.values({ id: randomUUID(), website_id: website.id, key: rotatedCollectionKey })
+			.execute();
 		await db
 			.updateTable('websites')
 			.set({ identity_mode: 'product', retention_days: 180 })
@@ -101,10 +110,17 @@ test.group('Owner data export', (group) => {
 			.map((line) => JSON.parse(line) as { type: string; [key: string]: unknown });
 		assert.deepEqual(records[0], {
 			type: 'boring-analytics-export',
-			schemaVersion: 2,
+			schemaVersion: 3,
 			exportedAt: '2026-04-01T12:00:00.000Z',
 		});
 		assert.equal(records.filter(({ type }) => type === 'website').length, 2);
+		assert.deepInclude(
+			records.find((record) => record.id === website.id),
+			{
+				allowedDomains: ['boring.money', 'shop.boring.money'],
+				collectionKeys: [website.trackingId, rotatedCollectionKey],
+			},
+		);
 		assert.equal(records.filter(({ type }) => type === 'event').length, 1_005);
 		assert.equal(records.filter(({ type }) => type === 'funnel').length, 1);
 		assert.equal(records.filter(({ type }) => type === 'funnel-step').length, 2);

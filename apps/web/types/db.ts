@@ -71,6 +71,22 @@ export interface Users {
   updated_at: Timestamp | null;
 }
 
+export interface WebsiteAllowedDomains {
+  created_at: Generated<Timestamp>;
+  hostname: string;
+  id: string;
+  website_id: string;
+}
+
+export interface WebsiteCollectionKeys {
+  created_at: Generated<Timestamp>;
+  id: string;
+  key: string;
+  last_used_at: Timestamp | null;
+  revoked_at: Timestamp | null;
+  website_id: string;
+}
+
 export interface Websites {
   allowed_domain: string;
   created_at: Generated<Timestamp>;
@@ -104,6 +120,8 @@ export interface DB {
   funnel_steps: FunnelSteps;
   funnels: Funnels;
   users: Users;
+  website_allowed_domains: WebsiteAllowedDomains;
+  website_collection_keys: WebsiteCollectionKeys;
   website_server_keys: WebsiteServerKeys;
   websites: Websites;
   workspaces: Workspaces;

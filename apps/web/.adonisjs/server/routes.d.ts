@@ -17,13 +17,19 @@ export type ScannedRoutes = {
     'account.show': { paramsTuple?: []; params?: {} }
     'account.export': { paramsTuple?: []; params?: {} }
     'session.destroy': { paramsTuple?: []; params?: {} }
+    'health.live': { paramsTuple?: []; params?: {} }
+    'health.ready': { paramsTuple?: []; params?: {} }
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.store': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_server_keys.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_allowed_domains.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_allowed_domains.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'domainId': ParamValue} }
+    'website_collection_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_collection_keys.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'keyId': ParamValue} }
     'events.store': { paramsTuple?: []; params?: {} }
     'server_events.store': { paramsTuple?: []; params?: {} }
-    'website_server_keys.index': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_identity_mode.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_retention.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_server_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -39,6 +45,8 @@ export type ScannedRoutes = {
     'session.create': { paramsTuple?: []; params?: {} }
     'account.show': { paramsTuple?: []; params?: {} }
     'account.export': { paramsTuple?: []; params?: {} }
+    'health.live': { paramsTuple?: []; params?: {} }
+    'health.ready': { paramsTuple?: []; params?: {} }
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -54,6 +62,8 @@ export type ScannedRoutes = {
     'session.create': { paramsTuple?: []; params?: {} }
     'account.show': { paramsTuple?: []; params?: {} }
     'account.export': { paramsTuple?: []; params?: {} }
+    'health.live': { paramsTuple?: []; params?: {} }
+    'health.ready': { paramsTuple?: []; params?: {} }
     'websites.create': { paramsTuple?: []; params?: {} }
     'websites.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'websites.events': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -66,6 +76,8 @@ export type ScannedRoutes = {
     'session.store': { paramsTuple?: []; params?: {} }
     'session.destroy': { paramsTuple?: []; params?: {} }
     'websites.store': { paramsTuple?: []; params?: {} }
+    'website_allowed_domains.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'website_collection_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'events.store': { paramsTuple?: []; params?: {} }
     'server_events.store': { paramsTuple?: []; params?: {} }
     'website_server_keys.store': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -73,12 +85,14 @@ export type ScannedRoutes = {
   PUT: {
     'funnels.update': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'funnelId': ParamValue} }
   }
+  DELETE: {
+    'website_allowed_domains.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'domainId': ParamValue} }
+    'website_collection_keys.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'keyId': ParamValue} }
+    'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+  }
   PATCH: {
     'website_identity_mode.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'website_retention.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-  }
-  DELETE: {
-    'website_server_keys.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
 }
 declare module '@adonisjs/core/types/http' {

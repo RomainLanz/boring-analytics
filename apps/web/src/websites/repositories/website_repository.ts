@@ -45,28 +45,74 @@ export class WebsiteRepository {
 	}
 
 	async findCollectionTarget(trackingId: string) {
-		const website = await this.transactions
-			.currentDatabase()
+		const database = this.transactions.currentDatabase();
+		const keyCandidate = await database
+			.selectFrom('website_collection_keys')
+			.select('website_id')
+			.where('key', '=', trackingId)
+			.where('revoked_at', 'is', null)
+			.executeTakeFirst();
+
+		if (!keyCandidate) {
+			return null;
+		}
+
+		const website = await database
 			.selectFrom('websites')
-			.select(['id', 'allowed_domain', 'identity_mode'])
-			.where('tracking_id', '=', trackingId)
+			.select(['id', 'identity_mode'])
+			.where('id', '=', keyCandidate.website_id)
+			.forShare()
 			.executeTakeFirst();
 
 		if (!website) {
 			return null;
 		}
 
-		const allowedDomain = AllowedDomain.create(website.allowed_domain);
+		const collectionKey = await database
+			.selectFrom('website_collection_keys')
+			.select('id')
+			.where('key', '=', trackingId)
+			.where('website_id', '=', website.id)
+			.where('revoked_at', 'is', null)
+			.forUpdate()
+			.executeTakeFirst();
 
-		if (!allowedDomain.ok) {
+		if (!collectionKey) {
+			return null;
+		}
+
+		const persistedDomains = await database
+			.selectFrom('website_allowed_domains')
+			.select('hostname')
+			.where('website_id', '=', website.id)
+			.execute();
+		const allowedDomains = persistedDomains.map(({ hostname }) => AllowedDomain.create(hostname));
+
+		if (allowedDomains.some((domain) => !domain.ok)) {
 			throw new Error(`Invalid allowed domain persisted for website ${website.id}`);
 		}
 
 		return {
 			id: website.id,
-			allowedDomain: allowedDomain.value,
+			collectionKeyId: collectionKey.id,
+			allowedDomains: allowedDomains.map((domain) => {
+				if (!domain.ok) {
+					throw new Error('The persisted domain was validated above');
+				}
+				return domain.value;
+			}),
 			identityMode: parseWebsiteIdentityMode(website.identity_mode),
 		};
+	}
+
+	async markCollectionKeyUsed(collectionKeyId: string, usedAt: Date) {
+		await this.transactions
+			.currentDatabase()
+			.updateTable('website_collection_keys')
+			.set({ last_used_at: usedAt })
+			.where('id', '=', collectionKeyId)
+			.where('revoked_at', 'is', null)
+			.execute();
 	}
 
 	async updateIdentityModeForOwner(ownerUserId: string, websiteId: string, identityMode: WebsiteIdentityMode) {

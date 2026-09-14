@@ -163,6 +163,30 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/identity/controllers/logout_controller').default['execute']>>>
     }
   }
+  'health.live': {
+    methods: ["GET","HEAD"]
+    pattern: '/health/live'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/shared/controllers/liveness_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/shared/controllers/liveness_controller').default['execute']>>>
+    }
+  }
+  'health.ready': {
+    methods: ["GET","HEAD"]
+    pattern: '/health/ready'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/shared/controllers/readiness_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/shared/controllers/readiness_controller').default['execute']>>>
+    }
+  }
   'websites.create': {
     methods: ["GET","HEAD"]
     pattern: '/websites/new'
@@ -211,6 +235,66 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/website_events_controller').default['render']>>>
     }
   }
+  'website_server_keys.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/websites/:id/settings'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/website_settings_controller').default['render']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/website_settings_controller').default['render']>>>
+    }
+  }
+  'website_allowed_domains.store': {
+    methods: ["POST"]
+    pattern: '/websites/:id/allowed-domains'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#app/websites/controllers/add_allowed_domain_controller').default)['validator']>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#app/websites/controllers/add_allowed_domain_controller').default)['validator']>>
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/add_allowed_domain_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/add_allowed_domain_controller').default['execute']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'website_allowed_domains.destroy': {
+    methods: ["DELETE"]
+    pattern: '/websites/:id/allowed-domains/:domainId'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue, ParamValue]
+      params: { id: ParamValue; domainId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/remove_allowed_domain_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/remove_allowed_domain_controller').default['execute']>>>
+    }
+  }
+  'website_collection_keys.store': {
+    methods: ["POST"]
+    pattern: '/websites/:id/collection-keys'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/create_collection_key_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/create_collection_key_controller').default['execute']>>>
+    }
+  }
+  'website_collection_keys.destroy': {
+    methods: ["DELETE"]
+    pattern: '/websites/:id/collection-keys/:keyId'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue, ParamValue]
+      params: { id: ParamValue; keyId: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#app/websites/controllers/revoke_collection_key_controller').default['execute']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/websites/controllers/revoke_collection_key_controller').default['execute']>>>
+    }
+  }
   'events.store': {
     methods: ["POST"]
     pattern: '/api/events'
@@ -233,18 +317,6 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/record_server_event_controller').default['execute']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/record_server_event_controller').default['execute']>>>
-    }
-  }
-  'website_server_keys.index': {
-    methods: ["GET","HEAD"]
-    pattern: '/websites/:id/settings'
-    types: {
-      body: {}
-      paramsTuple: [ParamValue]
-      params: { id: ParamValue }
-      query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#app/collection/controllers/server_event_settings_controller').default['render']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#app/collection/controllers/server_event_settings_controller').default['render']>>>
     }
   }
   'website_identity_mode.update': {

@@ -22,10 +22,6 @@ router
 router
 	.group(() => {
 		router
-			.get('/websites/:id/settings', [controllers.collection.ServerEventSettings, 'render'])
-			.where('id', router.matchers.uuid())
-			.as('website_server_keys.index');
-		router
 			.patch('/websites/:id/identity-mode', [controllers.websites.UpdateWebsiteIdentityMode, 'execute'])
 			.where('id', router.matchers.uuid())
 			.as('website_identity_mode.update');

@@ -11,7 +11,16 @@ A person who can authenticate and use the application.
 A personal ownership boundary created with a User. It owns Websites.
 
 **Website**:
-A source of browser analytics events identified by a public tracking ID and restricted to one allowed domain.
+A source of analytics Events owned by one Workspace. Browser collection resolves it through an active Public Collection
+Key and accepts requests only from an Allowed Domain.
+
+**Public Collection Key**:
+A non-secret Website-scoped identifier embedded in browser tracker snippets. A Website has one or two active keys during
+an explicit rotation; revocation is immediate.
+
+**Allowed Domain**:
+One of up to five exact, normalized hostnames from which a Website accepts browser Events. Ports do not affect matching;
+wildcards and implicit subdomains are not allowed.
 
 **Anonymous Mode**:
 The default Website identity mode. Boring Analytics derives a daily rotating Anonymous ID from request context, then

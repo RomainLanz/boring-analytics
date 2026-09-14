@@ -1,6 +1,7 @@
 import { Form } from '@adonisjs/inertia/react';
 import { Button } from '@boring-analytics/design-system/button';
 import { Card } from '@boring-analytics/design-system/card';
+import { Field } from '@boring-analytics/design-system/field';
 import { type Data } from '@generated/data';
 import { Head, usePage } from '@inertiajs/react';
 import { useState } from 'react';
@@ -8,10 +9,11 @@ import { WebsiteReportHeader } from '~/components/website-report-header';
 import { type InertiaProps } from '~/types';
 
 type PageProps = InertiaProps<{
-	settings: Data.Collection.ServerEventSettings;
+	settings: Data.Websites.WebsiteSettings;
 	serverEventsUrl: string;
+	trackerUrl: string;
 }>;
-type SettingsSection = 'identity' | 'server-events' | 'data-controls';
+type SettingsSection = 'identity' | 'browser-collection' | 'server-events' | 'data-controls';
 type RetentionValue = '60' | '90' | '180' | '365' | 'forever';
 
 const retentionOptions: Array<{ value: RetentionValue; label: string }> = [
@@ -22,10 +24,12 @@ const retentionOptions: Array<{ value: RetentionValue; label: string }> = [
 	{ value: 'forever', label: 'Forever' },
 ];
 
-export default function WebsiteSettings({ settings, serverEventsUrl }: PageProps) {
+export default function WebsiteSettings({ settings, serverEventsUrl, trackerUrl }: PageProps) {
 	const { flash } = usePage();
 	const [section, setSection] = useState<SettingsSection>(flash.serverKeySecret ? 'server-events' : 'data-controls');
 	const [copiedSecret, setCopiedSecret] = useState<string>();
+	const [copiedCollectionValue, setCopiedCollectionValue] = useState<string>();
+	const [selectedCollectionKeyId, setSelectedCollectionKeyId] = useState(settings.collectionKeys[0]?.id);
 	const [identityMode, setIdentityMode] = useState(settings.website.identityMode);
 	const [retentionDays, setRetentionDays] = useState<RetentionValue>(
 		settings.website.retentionDays === null ? 'forever' : (String(settings.website.retentionDays) as RetentionValue),
@@ -51,6 +55,11 @@ JSON`;
 		setCopiedSecret(flash.serverKeySecret);
 	}
 
+	async function copyCollectionValue(value: string) {
+		await navigator.clipboard.writeText(value);
+		setCopiedCollectionValue(value);
+	}
+
 	return (
 		<>
 			<Head title={`${settings.website.name} settings`} />
@@ -64,6 +73,9 @@ JSON`;
 					>
 						<SettingsLink active={section === 'identity'} onClick={() => setSection('identity')}>
 							Identity
+						</SettingsLink>
+						<SettingsLink active={section === 'browser-collection'} onClick={() => setSection('browser-collection')}>
+							Browser collection
 						</SettingsLink>
 						<SettingsLink active={section === 'server-events'} onClick={() => setSection('server-events')}>
 							Server events
@@ -79,6 +91,16 @@ JSON`;
 								websiteId={settings.website.id}
 								identityMode={identityMode}
 								onIdentityModeChange={setIdentityMode}
+							/>
+						) : null}
+						{section === 'browser-collection' ? (
+							<BrowserCollectionSettings
+								settings={settings}
+								trackerUrl={trackerUrl}
+								selectedCollectionKeyId={selectedCollectionKeyId}
+								copiedValue={copiedCollectionValue}
+								onSelectKey={setSelectedCollectionKeyId}
+								onCopy={copyCollectionValue}
 							/>
 						) : null}
 						{section === 'server-events' ? (
@@ -122,6 +144,217 @@ function SectionHeader({ title, description }: { title: string; description: str
 			<h2 className="text-ink text-xl font-bold tracking-tight">{title}</h2>
 			<p className="text-muted mt-1 text-sm">{description}</p>
 		</header>
+	);
+}
+
+function BrowserCollectionSettings({
+	settings,
+	trackerUrl,
+	selectedCollectionKeyId,
+	copiedValue,
+	onSelectKey,
+	onCopy,
+}: {
+	settings: Data.Websites.WebsiteSettings;
+	trackerUrl: string;
+	selectedCollectionKeyId?: string;
+	copiedValue?: string;
+	onSelectKey: (keyId: string) => void;
+	onCopy: (value: string) => void;
+}) {
+	const selectedKey =
+		settings.collectionKeys.find((collectionKey) => collectionKey.id === selectedCollectionKeyId) ??
+		settings.collectionKeys[0];
+	const snippet = selectedKey
+		? `<script
+  defer
+  data-website-id="${selectedKey.key}"
+  src="${trackerUrl}"
+></script>`
+		: '';
+
+	return (
+		<section aria-labelledby="browser-collection-title">
+			<SectionHeader
+				title="Browser collection"
+				description="Control the exact hostnames and public keys allowed to send browser events for this Website."
+			/>
+
+			<div className="mb-3 flex items-end justify-between gap-4">
+				<div>
+					<h3 className="text-ink text-sm font-semibold">Allowed domains</h3>
+					<p className="text-muted mt-1 text-xs">
+						Exact hostnames only. Do not include a protocol, port, path, or wildcard.
+					</p>
+				</div>
+				<span className="text-muted shrink-0 text-xs">{settings.allowedDomains.length} / 5</span>
+			</div>
+			<Card padding="none" className="overflow-hidden">
+				{settings.allowedDomains.map((domain) => (
+					<div
+						key={domain.id}
+						className="border-border flex flex-col gap-3 border-b px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+					>
+						<div className="min-w-0">
+							<div className="flex items-center gap-2">
+								<span className="bg-mint-soft text-mint rounded-control px-2 py-0.5 text-xs font-semibold">
+									Allowed
+								</span>
+								<code className="text-ink truncate text-sm">{domain.hostname}</code>
+							</div>
+							<p className="text-muted mt-1 text-xs">Added {formatDate(domain.createdAt)}</p>
+						</div>
+						<Form
+							route="website_allowed_domains.destroy"
+							routeParams={{ id: settings.website.id, domainId: domain.id }}
+						>
+							{({ processing }) => (
+								<Button
+									type="submit"
+									intent="secondary"
+									size="small"
+									loading={processing}
+									disabled={settings.allowedDomains.length === 1}
+									className="border-rose text-rose hover:bg-rose-soft self-start"
+								>
+									{processing ? 'Removing…' : 'Remove'}
+								</Button>
+							)}
+						</Form>
+					</div>
+				))}
+				<Form route="website_allowed_domains.store" routeParams={{ id: settings.website.id }} resetOnSuccess>
+					{({ errors, processing }) => (
+						<div className="bg-surface-muted border-border flex flex-col items-end gap-3 border-t p-5 sm:flex-row">
+							<Field
+								label="Add domain"
+								name="hostname"
+								placeholder="shop.example.com"
+								error={errors.hostname}
+								disabled={settings.allowedDomains.length >= 5}
+								rootClassName="w-full flex-1"
+							/>
+							<Button
+								type="submit"
+								size="small"
+								loading={processing}
+								disabled={settings.allowedDomains.length >= 5}
+								className="w-full sm:w-auto"
+							>
+								{processing ? 'Adding…' : 'Add domain'}
+							</Button>
+						</div>
+					)}
+				</Form>
+			</Card>
+			{settings.allowedDomains.length === 1 ? (
+				<p className="text-muted mt-2 text-xs">Add another domain before removing the last allowed domain.</p>
+			) : null}
+
+			<div className="mt-8 mb-3 flex items-end justify-between gap-4">
+				<div>
+					<h3 className="text-ink text-sm font-semibold">Public collection keys</h3>
+					<p className="text-muted mt-1 text-xs">
+						Public, Website-scoped identifiers. They are safe to copy in browser code.
+					</p>
+				</div>
+				<span className="text-muted shrink-0 text-xs">{settings.collectionKeys.length} / 2 active</span>
+			</div>
+			{settings.collectionKeys.length > 1 ? (
+				<p className="border-peach bg-peach-soft text-muted rounded-control mb-3 border px-4 py-3 text-sm">
+					Rotation in progress. Both keys accept events until you explicitly revoke one.
+				</p>
+			) : null}
+			<Card padding="none" className="overflow-hidden">
+				{settings.collectionKeys.map((collectionKey) => (
+					<fieldset
+						key={collectionKey.id}
+						aria-label={`Collection key ${collectionKey.key}`}
+						className="border-border flex flex-col gap-4 border-b p-5 last:border-b-0 sm:flex-row sm:items-end sm:justify-between"
+					>
+						<div className="min-w-0">
+							<div className="flex items-center gap-2">
+								<span className="bg-mint-soft text-mint rounded-control px-2 py-0.5 text-xs font-semibold">
+									{collectionKey.status === 'active' ? 'Active' : null}
+								</span>
+								<code className="text-ink text-sm break-all">{collectionKey.key}</code>
+							</div>
+							<p className="text-muted mt-2 text-xs">
+								Created {formatDate(collectionKey.createdAt)} · {formatLastUsed(collectionKey.lastUsedAt)}
+							</p>
+						</div>
+						<div className="flex flex-wrap gap-2">
+							<Button type="button" intent="secondary" size="small" onClick={() => onCopy(collectionKey.key)}>
+								{copiedValue === collectionKey.key ? 'Copied' : 'Copy key'}
+							</Button>
+							<Form
+								route="website_collection_keys.destroy"
+								routeParams={{ id: settings.website.id, keyId: collectionKey.id }}
+							>
+								{({ processing }) => (
+									<Button
+										type="submit"
+										intent="secondary"
+										size="small"
+										loading={processing}
+										disabled={settings.collectionKeys.length === 1}
+										className="border-rose text-rose hover:bg-rose-soft"
+										onClick={(event) => {
+											const lastUsed = formatLastUsed(collectionKey.lastUsedAt);
+
+											if (
+												!window.confirm(
+													`Revoke this public collection key? Revocation is immediate and snippets using it will stop collecting. ${lastUsed}.`,
+												)
+											) {
+												event.preventDefault();
+											}
+										}}
+									>
+										{processing ? 'Revoking…' : 'Revoke'}
+									</Button>
+								)}
+							</Form>
+						</div>
+					</fieldset>
+				))}
+				<div className="bg-surface-muted border-border flex justify-end border-t p-5">
+					<Form route="website_collection_keys.store" routeParams={{ id: settings.website.id }}>
+						{({ processing }) => (
+							<Button type="submit" size="small" loading={processing} disabled={settings.collectionKeys.length >= 2}>
+								{processing ? 'Creating…' : 'Create collection key'}
+							</Button>
+						)}
+					</Form>
+				</div>
+			</Card>
+
+			<div className="mt-6">
+				<label htmlFor="snippet-key" className="text-ink block text-sm font-semibold">
+					Snippet key
+				</label>
+				<select
+					id="snippet-key"
+					value={selectedKey?.id}
+					onChange={(event) => onSelectKey(event.target.value)}
+					className="border-border bg-surface text-ink rounded-control mt-2 w-full border px-3 py-2 text-sm"
+				>
+					{settings.collectionKeys.map((collectionKey) => (
+						<option key={collectionKey.id} value={collectionKey.id}>
+							{collectionKey.key}
+						</option>
+					))}
+				</select>
+				<div className="mt-3 flex flex-col gap-2 sm:flex-row">
+					<pre className="bg-surface-muted text-ink border-border rounded-control min-w-0 flex-1 overflow-x-auto border p-4 text-sm whitespace-pre-wrap">
+						<code>{snippet}</code>
+					</pre>
+					<Button type="button" intent="secondary" size="small" onClick={() => onCopy(snippet)}>
+						{copiedValue === snippet ? 'Copied' : 'Copy snippet'}
+					</Button>
+				</div>
+			</div>
+		</section>
 	);
 }
 
@@ -271,7 +504,7 @@ function ServerEventSettings({
 	copiedSecret,
 	onCopySecret,
 }: {
-	settings: Data.Collection.ServerEventSettings;
+	settings: Data.Websites.WebsiteSettings;
 	curl: string;
 	copiedSecret?: string;
 	onCopySecret: () => void;
@@ -411,4 +644,8 @@ const dateFormatter = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZ
 
 function formatDate(value: string) {
 	return dateFormatter.format(new Date(value));
+}
+
+function formatLastUsed(value: string | null) {
+	return value ? `Last used ${formatDate(value)}` : 'Never used';
 }

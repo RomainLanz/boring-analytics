@@ -6,7 +6,6 @@
 /// <reference path="./manifest.d.ts" />
 import type { InferData, InferVariants } from '@adonisjs/core/types/transformers'
 import type { InferSharedProps, InferFlashData } from '@adonisjs/inertia/types'
-import type CollectionServerEventSettingsTransformer from '#app/collection/transformers/server_event_settings_transformer'
 import type FunnelsFunnelEditorTransformer from '#app/funnels/transformers/funnel_editor_transformer'
 import type FunnelsFunnelIndexTransformer from '#app/funnels/transformers/funnel_index_transformer'
 import type FunnelsFunnelReportTransformer from '#app/funnels/transformers/funnel_report_transformer'
@@ -14,15 +13,10 @@ import type IdentityAccountDetailsTransformer from '#app/identity/transformers/a
 import type UserTransformer from '#app/transformers/user_transformer'
 import type WebsitesWebsiteEventsTransformer from '#app/websites/transformers/website_events_transformer'
 import type WebsitesWebsiteOverviewTransformer from '#app/websites/transformers/website_overview_transformer'
+import type WebsitesWebsiteSettingsTransformer from '#app/websites/transformers/website_settings_transformer'
 import type InertiaMiddleware from '#app/middleware/inertia_middleware'
 
 export namespace Data {
-  export namespace Collection {
-    export type ServerEventSettings = InferData<CollectionServerEventSettingsTransformer>
-    export namespace ServerEventSettings {
-      export type Variants = InferVariants<CollectionServerEventSettingsTransformer>
-    }
-  }
   export namespace Funnels {
     export type FunnelEditor = InferData<FunnelsFunnelEditorTransformer>
     export namespace FunnelEditor {
@@ -55,6 +49,10 @@ export namespace Data {
     export type WebsiteOverview = InferData<WebsitesWebsiteOverviewTransformer>
     export namespace WebsiteOverview {
       export type Variants = InferVariants<WebsitesWebsiteOverviewTransformer>
+    }
+    export type WebsiteSettings = InferData<WebsitesWebsiteSettingsTransformer>
+    export namespace WebsiteSettings {
+      export type Variants = InferVariants<WebsitesWebsiteSettingsTransformer>
     }
   }
   export type SharedProps = InferSharedProps<InertiaMiddleware>

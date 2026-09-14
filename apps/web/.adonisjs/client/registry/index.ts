@@ -84,6 +84,18 @@ const routes = {
     tokens: [{"old":"/logout","type":0,"val":"logout","end":""}],
     types: placeholder as Registry['session.destroy']['types'],
   },
+  'health.live': {
+    methods: ["GET","HEAD"],
+    pattern: '/health/live',
+    tokens: [{"old":"/health/live","type":0,"val":"health","end":""},{"old":"/health/live","type":0,"val":"live","end":""}],
+    types: placeholder as Registry['health.live']['types'],
+  },
+  'health.ready': {
+    methods: ["GET","HEAD"],
+    pattern: '/health/ready',
+    tokens: [{"old":"/health/ready","type":0,"val":"health","end":""},{"old":"/health/ready","type":0,"val":"ready","end":""}],
+    types: placeholder as Registry['health.ready']['types'],
+  },
   'websites.create': {
     methods: ["GET","HEAD"],
     pattern: '/websites/new',
@@ -108,6 +120,36 @@ const routes = {
     tokens: [{"old":"/websites/:id/events","type":0,"val":"websites","end":""},{"old":"/websites/:id/events","type":1,"val":"id","end":""},{"old":"/websites/:id/events","type":0,"val":"events","end":""}],
     types: placeholder as Registry['websites.events']['types'],
   },
+  'website_server_keys.index': {
+    methods: ["GET","HEAD"],
+    pattern: '/websites/:id/settings',
+    tokens: [{"old":"/websites/:id/settings","type":0,"val":"websites","end":""},{"old":"/websites/:id/settings","type":1,"val":"id","end":""},{"old":"/websites/:id/settings","type":0,"val":"settings","end":""}],
+    types: placeholder as Registry['website_server_keys.index']['types'],
+  },
+  'website_allowed_domains.store': {
+    methods: ["POST"],
+    pattern: '/websites/:id/allowed-domains',
+    tokens: [{"old":"/websites/:id/allowed-domains","type":0,"val":"websites","end":""},{"old":"/websites/:id/allowed-domains","type":1,"val":"id","end":""},{"old":"/websites/:id/allowed-domains","type":0,"val":"allowed-domains","end":""}],
+    types: placeholder as Registry['website_allowed_domains.store']['types'],
+  },
+  'website_allowed_domains.destroy': {
+    methods: ["DELETE"],
+    pattern: '/websites/:id/allowed-domains/:domainId',
+    tokens: [{"old":"/websites/:id/allowed-domains/:domainId","type":0,"val":"websites","end":""},{"old":"/websites/:id/allowed-domains/:domainId","type":1,"val":"id","end":""},{"old":"/websites/:id/allowed-domains/:domainId","type":0,"val":"allowed-domains","end":""},{"old":"/websites/:id/allowed-domains/:domainId","type":1,"val":"domainId","end":""}],
+    types: placeholder as Registry['website_allowed_domains.destroy']['types'],
+  },
+  'website_collection_keys.store': {
+    methods: ["POST"],
+    pattern: '/websites/:id/collection-keys',
+    tokens: [{"old":"/websites/:id/collection-keys","type":0,"val":"websites","end":""},{"old":"/websites/:id/collection-keys","type":1,"val":"id","end":""},{"old":"/websites/:id/collection-keys","type":0,"val":"collection-keys","end":""}],
+    types: placeholder as Registry['website_collection_keys.store']['types'],
+  },
+  'website_collection_keys.destroy': {
+    methods: ["DELETE"],
+    pattern: '/websites/:id/collection-keys/:keyId',
+    tokens: [{"old":"/websites/:id/collection-keys/:keyId","type":0,"val":"websites","end":""},{"old":"/websites/:id/collection-keys/:keyId","type":1,"val":"id","end":""},{"old":"/websites/:id/collection-keys/:keyId","type":0,"val":"collection-keys","end":""},{"old":"/websites/:id/collection-keys/:keyId","type":1,"val":"keyId","end":""}],
+    types: placeholder as Registry['website_collection_keys.destroy']['types'],
+  },
   'events.store': {
     methods: ["POST"],
     pattern: '/api/events',
@@ -119,12 +161,6 @@ const routes = {
     pattern: '/api/server/events',
     tokens: [{"old":"/api/server/events","type":0,"val":"api","end":""},{"old":"/api/server/events","type":0,"val":"server","end":""},{"old":"/api/server/events","type":0,"val":"events","end":""}],
     types: placeholder as Registry['server_events.store']['types'],
-  },
-  'website_server_keys.index': {
-    methods: ["GET","HEAD"],
-    pattern: '/websites/:id/settings',
-    tokens: [{"old":"/websites/:id/settings","type":0,"val":"websites","end":""},{"old":"/websites/:id/settings","type":1,"val":"id","end":""},{"old":"/websites/:id/settings","type":0,"val":"settings","end":""}],
-    types: placeholder as Registry['website_server_keys.index']['types'],
   },
   'website_identity_mode.update': {
     methods: ["PATCH"],

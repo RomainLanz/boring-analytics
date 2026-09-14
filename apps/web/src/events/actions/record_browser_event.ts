@@ -5,6 +5,7 @@ import { EventRepository } from '#collection/repositories/event_repository';
 import { AnonymousIdentity } from '#collection/services/anonymous_identity';
 import { technicalDimensionsFromUserAgent } from '#collection/technical_dimensions';
 import { err, ok, type Result } from '#core/result';
+import { TransactionManager } from '#shared/services/transaction_manager';
 import { WebsiteRepository } from '#websites/repositories/website_repository';
 import type { EventProperties } from '#collection/browser_event_protocol';
 
@@ -64,12 +65,20 @@ export class RecordBrowserEvent {
 		private readonly websites: WebsiteRepository,
 		private readonly events: EventRepository,
 		private readonly anonymousIdentity: AnonymousIdentity,
+		private readonly transactions: TransactionManager,
 	) {}
 
 	async execute(params: RecordBrowserEventParams): Promise<Result<void, RecordBrowserEventError>> {
+		return this.transactions.run(async () => {
+			await this.events.lockEventIds([params.eventId]);
+			return this.#execute(params);
+		});
+	}
+
+	async #execute(params: RecordBrowserEventParams): Promise<Result<void, RecordBrowserEventError>> {
 		const target = await this.websites.findCollectionTarget(params.trackingId);
 
-		if (!target || !target.allowedDomain.matchesOrigin(params.origin)) {
+		if (!target || !target.allowedDomains.some((domain) => domain.matchesOrigin(params.origin))) {
 			return err({ type: 'collection_forbidden' });
 		}
 
@@ -109,6 +118,7 @@ export class RecordBrowserEvent {
 				distinctId: params.distinctId,
 				...technicalDimensions,
 			});
+			await this.websites.markCollectionKeyUsed(target.collectionKeyId, receivedAt);
 			return ok(undefined);
 		}
 
@@ -138,6 +148,7 @@ export class RecordBrowserEvent {
 			distinctId: identity.value,
 			...technicalDimensions,
 		});
+		await this.websites.markCollectionKeyUsed(target.collectionKeyId, receivedAt);
 		return ok(undefined);
 	}
 }

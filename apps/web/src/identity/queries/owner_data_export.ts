@@ -3,7 +3,7 @@ import { EventSource } from '#collection/event_source';
 import { db } from '#shared/services/db';
 import { parseEventRetentionDays } from '#websites/event_retention';
 
-export const OWNER_DATA_EXPORT_SCHEMA_VERSION = 2;
+export const OWNER_DATA_EXPORT_SCHEMA_VERSION = 3;
 const DATABASE_STREAM_CHUNK_SIZE = 100;
 
 export class OwnerDataExport {
@@ -31,6 +31,19 @@ export class OwnerDataExport {
 					'websites.timezone',
 					'websites.identity_mode',
 					'websites.retention_days',
+					sql<string[]>`array(
+						select hostname
+						from website_allowed_domains
+						where website_id = websites.id
+						order by created_at, id
+					)`.as('allowed_domains'),
+					// Public collection keys are portable Website configuration, unlike server-key credentials.
+					sql<string[]>`array(
+						select key
+						from website_collection_keys
+						where website_id = websites.id and revoked_at is null
+						order by created_at, id
+					)`.as('collection_keys'),
 					portableTimestamp('websites.events_available_from').as('events_available_from'),
 					portableTimestamp('websites.created_at').as('created_at'),
 				])
@@ -44,6 +57,8 @@ export class OwnerDataExport {
 					name: website.name,
 					trackingId: website.tracking_id,
 					allowedDomain: website.allowed_domain,
+					allowedDomains: website.allowed_domains,
+					collectionKeys: website.collection_keys,
 					timezone: website.timezone,
 					identityMode: website.identity_mode,
 					retentionDays: parseEventRetentionDays(website.retention_days),

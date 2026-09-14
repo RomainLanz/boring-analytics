@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import limiter from '@adonisjs/limiter/services/main';
+import { db } from '#shared/services/db';
 import type { HttpContext } from '@adonisjs/core/http';
 import type { NextFn } from '@adonisjs/core/types/http';
 
@@ -65,7 +66,16 @@ export async function limitCollectionWebsite({ request }: HttpContext, next: Nex
 		trackingIdPattern.test(body.trackingId)
 			? body.trackingId.toLowerCase()
 			: 'invalid';
+	const target =
+		trackingId === 'invalid'
+			? undefined
+			: await db
+					.selectFrom('website_collection_keys')
+					.select('website_id')
+					.where('key', '=', trackingId)
+					.where('revoked_at', 'is', null)
+					.executeTakeFirst();
 
-	await collectionWebsites.consume(`${request.ip()}:${trackingId}`, collectionEventCost(body));
+	await collectionWebsites.consume(`${request.ip()}:${target?.website_id ?? trackingId}`, collectionEventCost(body));
 	return next();
 }

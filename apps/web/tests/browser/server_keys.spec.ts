@@ -142,6 +142,92 @@ test.group('Website server key settings', (group) => {
 	});
 });
 
+test.group('Website browser collection settings', (group) => {
+	group.each.setup(async () => {
+		await db.deleteFrom('users').execute();
+	});
+
+	test('manages exact hostnames and rotates public keys without ambiguous statuses', async ({
+		assert,
+		browserContext,
+		visit,
+	}) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id);
+		const original = await db
+			.selectFrom('website_collection_keys')
+			.select(['id', 'key'])
+			.where('website_id', '=', website.id)
+			.executeTakeFirstOrThrow();
+		await fetch('http://localhost:3333/api/events', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'origin': 'https://boring.money' },
+			body: JSON.stringify({
+				trackingId: original.key,
+				name: '$pageview',
+				occurredAt: new Date().toISOString(),
+				path: '/',
+				referrer: null,
+				utmSource: null,
+				utmMedium: null,
+				utmCampaign: null,
+			}),
+		});
+		await browserContext.loginAs(owner);
+		await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
+		const page = await visit(`/websites/${website.id}/settings`);
+		await page.getByRole('button', { name: 'Browser collection', exact: true }).click();
+
+		await page.getByRole('textbox', { name: 'Add domain' }).fill(' SHOP.BORING.MONEY. ');
+		await page.getByRole('button', { name: 'Add domain' }).click();
+		await page.getByText('shop.boring.money', { exact: true }).waitFor();
+		assert.sameMembers(
+			(
+				await db.selectFrom('website_allowed_domains').select('hostname').where('website_id', '=', website.id).execute()
+			).map(({ hostname }) => hostname),
+			['boring.money', 'shop.boring.money'],
+		);
+
+		await page.getByRole('button', { name: 'Create collection key' }).click();
+		await page.getByText('Rotation in progress.', { exact: false }).waitFor();
+		assert.equal(await page.getByText('Active', { exact: true }).count(), 2);
+		assert.equal(await page.getByText('Historical', { exact: false }).count(), 0);
+		const keys = await db
+			.selectFrom('website_collection_keys')
+			.select(['id', 'key'])
+			.where('website_id', '=', website.id)
+			.where('revoked_at', 'is', null)
+			.orderBy('created_at', 'desc')
+			.execute();
+		assert.lengthOf(keys, 2);
+		await page.getByLabel('Snippet key').selectOption(keys[1]!.id);
+		assert.include((await page.locator('pre code').last().textContent()) ?? '', keys[1]!.key);
+		await page.getByRole('button', { name: 'Copy snippet' }).click();
+		assert.include(await page.evaluate(() => navigator.clipboard.readText()), keys[1]!.key);
+
+		const originalRow = page.getByRole('group', { name: `Collection key ${original.key}` });
+		let confirmation = '';
+		page.once('dialog', async (dialog) => {
+			confirmation = dialog.message();
+			await dialog.accept();
+		});
+		await originalRow.getByRole('button', { name: 'Revoke', exact: true }).click();
+		await page.getByText('1 / 2 active', { exact: true }).waitFor();
+		assert.include(confirmation, 'Revocation is immediate');
+		assert.include(confirmation, 'Last used');
+		assert.isNotNull(
+			(
+				await db
+					.selectFrom('website_collection_keys')
+					.select('revoked_at')
+					.where('id', '=', original.id)
+					.executeTakeFirstOrThrow()
+			).revoked_at,
+		);
+		assert.isTrue(await page.getByRole('button', { name: 'Revoke', exact: true }).isDisabled());
+	});
+});
+
 test.group('Website data controls', (group) => {
 	group.each.setup(async () => {
 		await db.deleteFrom('users').execute();

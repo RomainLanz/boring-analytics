@@ -8,6 +8,9 @@ import { browserEventProtocol } from '#collection/browser_event_protocol';
 import { EventSource } from '#collection/event_source';
 import { db } from '#shared/services/db';
 import { collectionLimits } from '#start/limiter';
+import { AddAllowedDomain } from '#websites/actions/add_allowed_domain';
+import { CreateCollectionKey } from '#websites/actions/create_collection_key';
+import { RevokeCollectionKey } from '#websites/actions/revoke_collection_key';
 
 const endpoint = 'http://localhost:3333/api/events';
 
@@ -300,6 +303,81 @@ test.group('POST /api/events', (group) => {
 		);
 	});
 
+	test('orders collection-key locking before inserts shared by a single request and a batch', async ({ assert }) => {
+		const website = await createWebsite();
+		const blockerReady = deferred();
+		const releaseBlocker = deferred();
+		const blocker = db.transaction().execute(async (transaction) => {
+			await transaction
+				.selectFrom('website_collection_keys')
+				.select('id')
+				.where('key', '=', website.trackingId)
+				.forUpdate()
+				.executeTakeFirstOrThrow();
+			blockerReady.resolve();
+			await releaseBlocker.promise;
+		});
+		await blockerReady.promise;
+		const occurredAt = new Date().toISOString();
+		const batch = postBatch(website.trackingId, [
+			browserEvent('first', occurredAt),
+			browserEvent('shared', occurredAt),
+		]);
+
+		await waitForLockWaiters(1);
+		const single = postCustomEvent(website.trackingId, { eventId: 'shared' });
+
+		try {
+			await waitForLockWaiters(2);
+		} finally {
+			releaseBlocker.resolve();
+		}
+
+		const responses = await Promise.all([batch, single]);
+		await blocker;
+		assert.deepEqual(
+			responses.map(({ status }) => status),
+			[202, 202],
+		);
+		assert.sameMembers(
+			(await db.selectFrom('events').select('event_id').execute()).map(({ event_id }) => event_id),
+			['first', 'shared'],
+		);
+	});
+
+	test('serializes concurrent last-use updates before inserting distinct events', async ({ assert }) => {
+		const website = await createWebsite();
+		const blockerReady = deferred();
+		const releaseBlocker = deferred();
+		const blocker = db.transaction().execute(async (transaction) => {
+			await sql`lock table events in share mode`.execute(transaction);
+			blockerReady.resolve();
+			await releaseBlocker.promise;
+		});
+		await blockerReady.promise;
+		const requests = [
+			postCustomEvent(website.trackingId, { eventId: 'concurrent-a' }),
+			postCustomEvent(website.trackingId, { eventId: 'concurrent-b' }),
+		];
+
+		try {
+			await waitForLockWaiters(2);
+		} finally {
+			releaseBlocker.resolve();
+		}
+
+		const responses = await Promise.all(requests);
+		await blocker;
+		assert.deepEqual(
+			responses.map(({ status }) => status),
+			[202, 202],
+		);
+		assert.sameMembers(
+			(await db.selectFrom('events').select('event_id').execute()).map(({ event_id }) => event_id),
+			['concurrent-a', 'concurrent-b'],
+		);
+	});
+
 	test('avoids deadlocks for concurrent browser and server batches with reversed event IDs', async ({ assert }) => {
 		const website = await createWebsite();
 		const createServerKey = await app.container.make(CreateServerKey);
@@ -517,6 +595,119 @@ test.group('POST /api/events', (group) => {
 		assert.equal(forbidden.status, 403);
 		assert.equal(unknown.status, 403);
 		assert.deepEqual(await forbidden.json(), await unknown.json());
+	});
+
+	test('accepts every explicit normalized hostname without allowing implicit subdomains', async ({ assert }) => {
+		const website = await createWebsite();
+		const addDomain = await app.container.make(AddAllowedDomain);
+		assert.isTrue(
+			(
+				await addDomain.execute({
+					ownerUserId: website.ownerUserId,
+					websiteId: website.websiteId,
+					hostname: ' SHOP.Example.COM. ',
+				})
+			).ok,
+		);
+
+		assert.equal((await postEvent(website.trackingId, {}, 'https://example.com')).status, 202);
+		assert.equal((await postEvent(website.trackingId, {}, 'http://shop.example.com:4173')).status, 202);
+		assert.equal((await postEvent(website.trackingId, {}, 'https://deep.shop.example.com')).status, 403);
+	});
+
+	test('accepts localhost, punycode, and IPv4 Origins according to the existing hostname policy', async ({
+		assert,
+	}) => {
+		for (const [hostname, origin] of [
+			['localhost', 'http://localhost:5173'],
+			['xn--mnich-kva.example', 'https://xn--mnich-kva.example'],
+			['192.0.2.1', 'http://192.0.2.1:8080'],
+		] as const) {
+			const website = await createWebsite(hostname);
+			assert.equal(
+				(await postEvent(website.trackingId, {}, origin, '', `${website.websiteId.slice(0, 8)}.1`)).status,
+				202,
+			);
+		}
+	});
+
+	test('accepts two active collection keys, records use, and makes revocation indistinguishable and immediate', async ({
+		assert,
+	}) => {
+		const website = await createWebsite('example.com', 'product');
+		const createKey = await app.container.make(CreateCollectionKey);
+		const revokeKey = await app.container.make(RevokeCollectionKey);
+		const replacement = await createKey.execute({ ownerUserId: website.ownerUserId, websiteId: website.websiteId });
+
+		if (!replacement.ok) {
+			throw new Error('The replacement key must be created');
+		}
+
+		assert.equal((await postCustomEvent(website.trackingId, { distinctId: 'product-a' })).status, 202);
+		assert.equal((await postIdentify(replacement.value.key, 'product-a')).status, 202);
+		assert.isNotNull(
+			(
+				await db
+					.selectFrom('website_collection_keys')
+					.select('last_used_at')
+					.where('id', '=', replacement.value.id)
+					.executeTakeFirstOrThrow()
+			).last_used_at,
+		);
+
+		const original = await db
+			.selectFrom('website_collection_keys')
+			.select('id')
+			.where('key', '=', website.trackingId)
+			.executeTakeFirstOrThrow();
+		assert.isTrue(
+			(
+				await revokeKey.execute({
+					ownerUserId: website.ownerUserId,
+					websiteId: website.websiteId,
+					collectionKeyId: original.id,
+				})
+			).ok,
+		);
+		const revoked = await postEvent(website.trackingId, {}, 'https://example.com');
+		const unknown = await postEvent(randomUUID(), {}, 'https://example.com');
+		const forbidden = await postEvent(replacement.value.key, {}, 'https://attacker.example');
+		assert.equal(revoked.status, 403);
+		assert.equal(unknown.status, 403);
+		assert.equal(forbidden.status, 403);
+		const revokedPayload = await revoked.json();
+		const unknownPayload = await unknown.json();
+		assert.deepEqual(revokedPayload, unknownPayload);
+		assert.deepEqual(unknownPayload, await forbidden.json());
+	});
+
+	test('rejects a collection lookup that was waiting when its key was revoked', async ({ assert }) => {
+		const website = await createWebsite();
+		const revocationReady = deferred();
+		const releaseRevocation = deferred();
+		const revocation = db.transaction().execute(async (transaction) => {
+			await transaction.selectFrom('websites').select('id').where('id', '=', website.websiteId).forUpdate().execute();
+			await transaction
+				.updateTable('website_collection_keys')
+				.set({ revoked_at: new Date() })
+				.where('key', '=', website.trackingId)
+				.execute();
+			revocationReady.resolve();
+			await releaseRevocation.promise;
+		});
+		await revocationReady.promise;
+		const request = postEvent(website.trackingId, {});
+
+		try {
+			await waitForLockWaiters(1);
+		} finally {
+			releaseRevocation.resolve();
+		}
+
+		const response = await request;
+		await revocation;
+		assert.equal(response.status, 403);
+		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
 	});
 
 	test('persists a supplied opaque distinct_id for Product browser events', async ({ assert }) => {
@@ -860,6 +1051,29 @@ test.group('POST /api/events', (group) => {
 		assert.notProperty(event, 'user_agent');
 	});
 
+	test('shares the per-Website quota across active collection keys', async ({ assert }) => {
+		const website = await createWebsite();
+		const createKey = await app.container.make(CreateCollectionKey);
+		const replacement = await createKey.execute({ ownerUserId: website.ownerUserId, websiteId: website.websiteId });
+
+		if (!replacement.ok) {
+			throw new Error('The replacement key must be created');
+		}
+		const events = Array.from({ length: browserEventProtocol.maxBatchEvents }, (_, index) => ({
+			name: `event-${index}`,
+			occurredAt: new Date().toISOString(),
+			path: '/',
+			properties: {},
+		}));
+
+		for (let batch = 0; batch < collectionLimits.perWebsiteAndSource / events.length; batch++) {
+			const key = batch % 2 === 0 ? website.trackingId : replacement.value.key;
+			assert.equal((await postBatch(key, events)).status, 202);
+		}
+
+		assert.equal((await postCustomEvent(replacement.value.key, {})).status, 429);
+	});
+
 	test('rate limits a source rotating unknown tracking IDs', async ({ assert }) => {
 		for (let request = 0; request < collectionLimits.perSource; request++) {
 			const response = await postEvent(randomUUID(), {});
@@ -887,3 +1101,34 @@ test.group('POST /api/events', (group) => {
 		assert.equal(response.status, 202);
 	});
 });
+
+function browserEvent(eventId: string, occurredAt: string) {
+	return { name: 'signup', occurredAt, path: '/', properties: {}, eventId };
+}
+
+function deferred() {
+	let resolve!: () => void;
+	const promise = new Promise<void>((done) => {
+		resolve = done;
+	});
+
+	return { promise, resolve };
+}
+
+async function waitForLockWaiters(expected: number) {
+	for (let attempt = 0; attempt < 100; attempt++) {
+		const result = await sql<{ count: number }>`
+			select count(*)::integer as count
+			from pg_stat_activity
+			where pid <> pg_backend_pid() and wait_event_type = 'Lock'
+		`.execute(db);
+
+		if (result.rows[0]!.count >= expected) {
+			return;
+		}
+
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+
+	throw new Error(`Expected at least ${expected} PostgreSQL lock waiters`);
+}

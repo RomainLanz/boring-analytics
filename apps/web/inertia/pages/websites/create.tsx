@@ -12,7 +12,9 @@ export default function CreateWebsite() {
 				<header className="mb-8">
 					<p className="text-accent text-sm font-semibold tracking-wide uppercase">Websites</p>
 					<h1 className="text-ink mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Add a website</h1>
-					<p className="text-muted mt-3">Choose the only domain allowed to send pageviews for this website.</p>
+					<p className="text-muted mt-3">
+						Choose the first domain allowed to send browser events for this Website. You can add more in Settings.
+					</p>
 				</header>
 
 				<Card>
