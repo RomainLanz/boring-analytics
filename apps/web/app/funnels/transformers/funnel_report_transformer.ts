@@ -11,6 +11,7 @@ export default class FunnelReportTransformer extends BaseTransformer<FunnelRepor
 			'summary',
 			'steps',
 			'comparison',
+			'segmentation',
 		]);
 	}
 }

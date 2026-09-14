@@ -1,4 +1,5 @@
 import { inject } from '@adonisjs/core';
+import { parseFunnelReportSegmentation } from '#app/funnels/funnel_report_segmentation';
 import FunnelReportTransformer from '#app/funnels/transformers/funnel_report_transformer';
 import { FunnelReportQuery } from '#funnels/queries/funnel_report_query';
 import { parseWebsiteReportPeriodPreset } from '#websites/queries/website_report_period';
@@ -11,12 +12,17 @@ export default class FunnelReportController {
 	async render({ auth, inertia, params, request, response }: HttpContext) {
 		const periodInput: unknown = request.input('period');
 		const periodPreset = parseWebsiteReportPeriodPreset(typeof periodInput === 'string' ? periodInput : undefined);
+		const segmentation = parseFunnelReportSegmentation({
+			segment: request.input('segment'),
+			property: request.input('property'),
+		});
 		const report = await this.funnelReport.execute(
 			params.funnelId,
 			params.id,
 			auth.getUserOrFail().id,
 			new Date(),
 			periodPreset,
+			segmentation,
 		);
 
 		if (!report) {

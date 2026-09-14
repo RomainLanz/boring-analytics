@@ -15,14 +15,23 @@ test.group('Funnels', (group) => {
 		const owner = await createUser('Ada', 'ada@example.com');
 		const outsider = await createUser('Grace', 'grace@example.com');
 		const website = await createWebsite(owner.id);
+		const firstStepName = 'landingpageviewwithoutnaturalbreakpoints'.padEnd(64, 'x');
+		const finalStepName = 'subscription_started_with_annual_enterprise_contract';
+		const longPropertyKey = 'propertywithoutnaturalbreakpoints'.padEnd(64, 'x');
 		const now = Date.now();
 		await db
 			.insertInto('events')
 			.values([
-				event(website.id, 'converted', '$pageview', new Date(now - 60 * 60_000), '/pricing'),
+				{
+					...event(website.id, 'converted', firstStepName, new Date(now - 60 * 60_000), '/pricing'),
+					properties: { [longPropertyKey]: 'enterprise' },
+				},
 				event(website.id, 'converted', 'newsletter_opened', new Date(now - 55 * 60_000)),
-				event(website.id, 'converted', 'signup ', new Date(now - 50 * 60_000)),
-				event(website.id, 'abandoned', '$pageview', new Date(now - 45 * 60_000), '/pricing'),
+				event(website.id, 'converted', finalStepName, new Date(now - 50 * 60_000)),
+				{
+					...event(website.id, 'abandoned', firstStepName, new Date(now - 45 * 60_000), '/pricing'),
+					properties: { [longPropertyKey]: 'starter' },
+				},
 			])
 			.execute();
 
@@ -32,10 +41,10 @@ test.group('Funnels', (group) => {
 		await page.getByText('No Funnels yet', { exact: true }).waitFor();
 		await page.getByRole('link', { name: 'Create your first Funnel' }).click();
 		await page.getByLabel('Funnel name').fill('Signup conversion');
-		await page.getByLabel('Event').nth(0).fill('$pageview');
+		await page.getByLabel('Event').nth(0).fill(firstStepName);
 		await page.getByLabel('Filter').nth(0).selectOption('path');
 		await page.getByLabel('Path value').fill('/pricing');
-		await page.getByLabel('Event').nth(1).fill('signup ');
+		await page.getByLabel('Event').nth(1).fill(finalStepName);
 		await page.getByRole('button', { name: 'Create Funnel' }).click();
 		await page.waitForURL(/\/websites\/[0-9a-f-]+\/funnels\/[0-9a-f-]+$/u);
 
@@ -48,6 +57,29 @@ test.group('Funnels', (group) => {
 		await page.getByText('Previous', { exact: true }).first().waitFor();
 		await page.getByText('New vs previous 30 days', { exact: true }).first().waitFor();
 		await page.getByText('newsletter_opened', { exact: true }).waitFor({ state: 'detached' });
+		const finalStepLabel = page.getByText(`2. ${finalStepName}`, { exact: true });
+
+		for (const viewport of [
+			{ width: 1280, height: 900 },
+			{ width: 900, height: 900 },
+			{ width: 390, height: 844 },
+		]) {
+			await page.setViewportSize(viewport);
+			const dimensions = await finalStepLabel.evaluate((element) => ({
+				clientHeight: element.clientHeight,
+				clientWidth: element.clientWidth,
+				lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+				scrollWidth: element.scrollWidth,
+				whiteSpace: getComputedStyle(element).whiteSpace,
+			}));
+			assert.equal(dimensions.whiteSpace, 'normal');
+			assert.isAtMost(dimensions.scrollWidth, dimensions.clientWidth);
+
+			if (viewport.width === 1280) {
+				assert.isAbove(dimensions.clientHeight, dimensions.lineHeight);
+			}
+		}
+		await page.setViewportSize({ width: 1280, height: 900 });
 
 		const funnelId = page.url().split('/').at(-1);
 
@@ -71,6 +103,50 @@ test.group('Funnels', (group) => {
 		);
 		await page.goto(new URL(`?period=14`, page.url()).href);
 		assert.equal(await periodNavigation.getByRole('link', { name: '30 days' }).getAttribute('aria-current'), 'page');
+		await page.getByLabel('Segment by').selectOption('path');
+		await page.waitForURL(/\?period=30&segment=path$/u);
+		const segmentation = page.getByRole('region', { name: 'Funnel segments' });
+		await segmentation.getByRole('columnheader', { name: 'Landing path' }).waitFor();
+		await segmentation.getByText('/pricing', { exact: true }).first().waitFor();
+		const segmentationRule = segmentation.getByText(
+			`Each identity keeps the segment from its first matching ${firstStepName} event. Later events cannot change it.`,
+		);
+		await segmentationRule.waitFor();
+
+		for (const viewport of [
+			{ width: 1280, height: 900 },
+			{ width: 900, height: 900 },
+			{ width: 390, height: 844 },
+		]) {
+			await page.setViewportSize(viewport);
+			const widths = await segmentationRule.evaluate((element) => ({
+				clientWidth: element.clientWidth,
+				documentClientWidth: document.documentElement.clientWidth,
+				documentScrollWidth: document.documentElement.scrollWidth,
+				scrollWidth: element.scrollWidth,
+			}));
+			assert.isAtMost(widths.scrollWidth, widths.clientWidth);
+			assert.isAtMost(widths.documentScrollWidth, widths.documentClientWidth);
+		}
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.getByLabel('Segment by').selectOption(`property:${longPropertyKey}`);
+		await page.waitForURL(new RegExp(`segment=property&property=${longPropertyKey}$`, 'u'));
+		const propertyHeader = segmentation.getByRole('columnheader', { name: `Property · ${longPropertyKey}` });
+
+		for (const viewport of [
+			{ width: 1280, height: 900 },
+			{ width: 900, height: 900 },
+		]) {
+			await page.setViewportSize(viewport);
+			const dimensions = await propertyHeader.evaluate((element) => ({
+				clientWidth: element.clientWidth,
+				scrollWidth: element.scrollWidth,
+				whiteSpace: getComputedStyle(element).whiteSpace,
+			}));
+			assert.equal(dimensions.whiteSpace, 'normal');
+			assert.isAtMost(dimensions.scrollWidth, dimensions.clientWidth);
+		}
+		await page.setViewportSize({ width: 1280, height: 900 });
 
 		await db.updateTable('funnels').set('conversion_window_seconds', 900).where('id', '=', funnelId).execute();
 		await page.getByRole('link', { name: 'Edit Funnel' }).click();
@@ -115,7 +191,7 @@ test.group('Funnels', (group) => {
 			page.getByRole('button', { name: 'Save Funnel' }).click(),
 		]);
 		await page.getByRole('alert').waitFor();
-		await page.getByLabel('Event').nth(0).fill('$pageview');
+		await page.getByLabel('Event').nth(0).fill(firstStepName);
 		await page.getByLabel('Value type').selectOption('string');
 		await page.getByRole('textbox', { name: 'Value', exact: true }).fill('');
 		await page.getByRole('button', { name: 'Save Funnel' }).click();
