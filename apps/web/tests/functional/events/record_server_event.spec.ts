@@ -50,6 +50,9 @@ test.group('POST /api/server/events', (group) => {
 		assert.isNull(event.session_id);
 		assert.isNull(event.referrer);
 		assert.isNull(event.utm_source);
+		assert.isNull(event.browser);
+		assert.isNull(event.operating_system);
+		assert.isNull(event.device);
 	});
 
 	test('persists reliable Product server events with distinct_id and no browser identity', async ({ assert }) => {

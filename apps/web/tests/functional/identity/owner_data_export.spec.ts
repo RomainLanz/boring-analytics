@@ -55,6 +55,13 @@ test.group('Owner data export', (group) => {
 			.insertInto('events')
 			.values([
 				...Array.from({ length: 1_001 }, (_, index) => rawEvent(website.id, `owner-${index}`)),
+				{
+					...rawEvent(website.id, 'browser-technical-dimensions'),
+					source: EventSource.Browser,
+					browser: 'Chrome',
+					operating_system: 'Linux',
+					device: 'Desktop',
+				},
 				rawEvent(secondWebsite.id, 'second-website'),
 				rawEvent(outsiderWebsite.id, 'outsider-secret-event'),
 				{
@@ -94,11 +101,11 @@ test.group('Owner data export', (group) => {
 			.map((line) => JSON.parse(line) as { type: string; [key: string]: unknown });
 		assert.deepEqual(records[0], {
 			type: 'boring-analytics-export',
-			schemaVersion: 1,
+			schemaVersion: 2,
 			exportedAt: '2026-04-01T12:00:00.000Z',
 		});
 		assert.equal(records.filter(({ type }) => type === 'website').length, 2);
-		assert.equal(records.filter(({ type }) => type === 'event').length, 1_004);
+		assert.equal(records.filter(({ type }) => type === 'event').length, 1_005);
 		assert.equal(records.filter(({ type }) => type === 'funnel').length, 1);
 		assert.equal(records.filter(({ type }) => type === 'funnel-step').length, 2);
 		assert.include(content, 'owner-1000');
@@ -109,6 +116,18 @@ test.group('Owner data export', (group) => {
 		assert.notInclude(content, 'secret-hash-must-not-leak');
 		assert.notInclude(content, 'ba_server_visible_prefix');
 		assert.notInclude(content, 'ada@example.com');
+		assert.notInclude(content, 'userAgent');
+		assert.notInclude(content, 'user_agent');
+		const firstOwnerEvent = records.find((record) => record.eventId === 'owner-0');
+		assert.deepInclude(firstOwnerEvent, {
+			browser: null,
+			operatingSystem: null,
+			device: null,
+		});
+		assert.deepInclude(
+			records.find((record) => record.eventId === 'browser-technical-dimensions'),
+			{ browser: 'Chrome', operatingSystem: 'Linux', device: 'Desktop' },
+		);
 		const microsecondEvents = records.filter(
 			(record) => record.eventId === 'microsecond-first' || record.eventId === 'microsecond-second',
 		);

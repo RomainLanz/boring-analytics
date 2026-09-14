@@ -60,18 +60,19 @@ that `VACUUM FULL` requires.
 
 An authenticated owner can download `/account/export`. The response is streamed from PostgreSQL in 100-row chunks as
 newline-delimited JSON. The response uses `application/x-ndjson`, disables shared caching, and names files
-`boring-analytics-export-v1-YYYY-MM-DD.jsonl`.
+`boring-analytics-export-v2-YYYY-MM-DD.jsonl`.
 
 The first line is the manifest:
 
 ```json
-{ "type": "boring-analytics-export", "schemaVersion": 1, "exportedAt": "2026-04-01T12:00:00.000Z" }
+{ "type": "boring-analytics-export", "schemaVersion": 2, "exportedAt": "2026-04-01T12:00:00.000Z" }
 ```
 
 Following lines use the record types `website`, `event`, `funnel`, and `funnel-step`. IDs preserve relationships between
-records. Event records contain the existing anonymous, session, distinct, identification, and `event_id` fields. The
-export does not create Person or profile records. PostgreSQL timestamps use UTC with six fractional digits so batch
-event ordering remains portable.
+records. Event records contain the existing anonymous, session, distinct, identification, and `event_id` fields, plus
+the normalized `browser`, `operatingSystem`, and `device` dimensions. They never contain the raw User-Agent. The export
+does not create Person or profile records. PostgreSQL timestamps use UTC with six fractional digits so batch event
+ordering remains portable.
 
 Queries join every record through `workspaces.owner_user_id`. The export excludes Users, email addresses, passwords,
 sessions, authentication state, server-key prefixes and hashes, one-shot server-key secrets, Workspace owner IDs, and

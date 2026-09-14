@@ -3,6 +3,7 @@ import { validateBrowserEventIdentity, type EventIdentityError } from '#collecti
 import { isAcceptableEventTime } from '#collection/event_time';
 import { EventRepository } from '#collection/repositories/event_repository';
 import { AnonymousIdentity } from '#collection/services/anonymous_identity';
+import { technicalDimensionsFromUserAgent } from '#collection/technical_dimensions';
 import { err, ok, type Result } from '#core/result';
 import { WebsiteRepository } from '#websites/repositories/website_repository';
 import type { EventProperties } from '#collection/browser_event_protocol';
@@ -90,6 +91,8 @@ export class RecordBrowserEvent {
 			return identity;
 		}
 
+		const technicalDimensions = technicalDimensionsFromUserAgent(params.userAgent);
+
 		if (params.type === 'identify') {
 			const currentIdentity = this.anonymousIdentity.derive({
 				websiteId: target.id,
@@ -104,6 +107,7 @@ export class RecordBrowserEvent {
 				path: params.path,
 				anonymousId: currentIdentity.anonymousId,
 				distinctId: params.distinctId,
+				...technicalDimensions,
 			});
 			return ok(undefined);
 		}
@@ -132,6 +136,7 @@ export class RecordBrowserEvent {
 			anonymousId: anonymousIdentity?.anonymousId ?? null,
 			sessionId: anonymousIdentity === null ? null : (params.sessionId ?? anonymousIdentity.sessionId),
 			distinctId: identity.value,
+			...technicalDimensions,
 		});
 		return ok(undefined);
 	}

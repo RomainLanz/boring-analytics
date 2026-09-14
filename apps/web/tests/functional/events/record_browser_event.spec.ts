@@ -43,6 +43,7 @@ async function postEvent(
 	origin = 'https://example.com',
 	query = '',
 	ip = '203.0.113.42',
+	userAgent?: string,
 ) {
 	return fetch(`${endpoint}${query}`, {
 		method: 'POST',
@@ -51,6 +52,7 @@ async function postEvent(
 			'content-type': 'application/json',
 			origin,
 			'x-forwarded-for': ip,
+			...(userAgent ? { 'user-agent': userAgent } : {}),
 		},
 		body: JSON.stringify({
 			trackingId,
@@ -198,6 +200,22 @@ test.group('POST /api/events', (group) => {
 		assert.match(event.session_id ?? '', /^[A-Za-z0-9_-]{43}$/u);
 		assert.notProperty(event, 'ip');
 		assert.notProperty(event, 'user_agent');
+	});
+
+	test('persists only coarse dimensions derived from the transient User-Agent', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const userAgent =
+			'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0';
+
+		const response = await postEvent(trackingId, {}, undefined, '', undefined, userAgent);
+
+		assert.equal(response.status, 202);
+		const event = await db
+			.selectFrom('events')
+			.select(['browser', 'operating_system', 'device'])
+			.executeTakeFirstOrThrow();
+		assert.deepEqual(event, { browser: 'Edge', operating_system: 'Windows', device: 'Desktop' });
+		assert.notInclude(JSON.stringify(event), userAgent);
 	});
 
 	test('persists the ephemeral session supplied by the browser tracker', async ({ assert }) => {
@@ -385,6 +403,27 @@ test.group('POST /api/events', (group) => {
 		assert.notEqual(events[0]?.received_at_text, events[1]?.received_at_text);
 	});
 
+	test('uses the request User-Agent for every event in a browser batch', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const occurredAt = new Date().toISOString();
+
+		const response = await postBatch(trackingId, [
+			{ name: '$pageview', occurredAt, path: '/', referrer: null, utmSource: null, utmMedium: null, utmCampaign: null },
+			{ name: 'signup', occurredAt, path: '/', properties: {} },
+		]);
+
+		assert.equal(response.status, 202);
+		const events = await db
+			.selectFrom('events')
+			.select(['browser', 'operating_system', 'device'])
+			.orderBy('received_at')
+			.execute();
+		assert.deepEqual(events, [
+			{ browser: 'Other', operating_system: 'Other', device: 'Other' },
+			{ browser: 'Other', operating_system: 'Other', device: 'Other' },
+		]);
+	});
+
 	test('rolls back earlier batch events when a later identity rule fails', async ({ assert }) => {
 		const { trackingId } = await createWebsite();
 		const occurredAt = new Date().toISOString();
@@ -528,7 +567,18 @@ test.group('POST /api/events', (group) => {
 		assert.equal(conflicting.status, 202);
 		const events = await db
 			.selectFrom('events')
-			.select(['website_id', 'name', 'source', 'anonymous_id', 'session_id', 'distinct_id', 'properties'])
+			.select([
+				'website_id',
+				'name',
+				'source',
+				'anonymous_id',
+				'session_id',
+				'distinct_id',
+				'properties',
+				'browser',
+				'operating_system',
+				'device',
+			])
 			.orderBy('received_at')
 			.execute();
 		assert.lengthOf(events, 2);
@@ -540,6 +590,9 @@ test.group('POST /api/events', (group) => {
 			session_id: null,
 			distinct_id: 'product-a',
 			properties: null,
+			browser: 'Other',
+			operating_system: 'Other',
+			device: 'Other',
 		});
 	});
 

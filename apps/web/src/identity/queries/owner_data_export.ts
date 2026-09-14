@@ -3,7 +3,7 @@ import { EventSource } from '#collection/event_source';
 import { db } from '#shared/services/db';
 import { parseEventRetentionDays } from '#websites/event_retention';
 
-export const OWNER_DATA_EXPORT_SCHEMA_VERSION = 1;
+export const OWNER_DATA_EXPORT_SCHEMA_VERSION = 2;
 const DATABASE_STREAM_CHUNK_SIZE = 100;
 
 export class OwnerDataExport {
@@ -72,6 +72,9 @@ export class OwnerDataExport {
 					'events.utm_source',
 					'events.utm_medium',
 					'events.utm_campaign',
+					'events.browser',
+					'events.operating_system',
+					'events.device',
 					'events.properties',
 				])
 				.where('workspaces.owner_user_id', '=', ownerUserId)
@@ -97,6 +100,9 @@ export class OwnerDataExport {
 					utmSource: event.utm_source,
 					utmMedium: event.utm_medium,
 					utmCampaign: event.utm_campaign,
+					browser: event.browser,
+					operatingSystem: event.operating_system,
+					device: event.device,
 					properties: event.properties,
 				});
 			}

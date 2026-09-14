@@ -584,18 +584,96 @@ test.group('Browser tracker', (group) => {
 		assert.equal(event.path, '/docs/%5Bslug%5D%7C50%25-off/%5Bkept%5D');
 	});
 
-	test('does not collect when Do Not Track is enabled', async ({ assert, browserContext }) => {
+	test('does not use cookies or localStorage and ignores DOM and form content', async ({ assert, browserContext }) => {
 		const trackingId = await createWebsite();
+		await browserContext.addInitScript(() => {
+			const cookie = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+			const localStorage = Object.getOwnPropertyDescriptor(Window.prototype, 'localStorage');
+			const privacyAccess = { cookieReads: 0, cookieWrites: 0, localStorageReads: 0 };
+			(
+				window as unknown as Window & {
+					__privacyAccess: { cookieReads: number; cookieWrites: number; localStorageReads: number };
+				}
+			).__privacyAccess = privacyAccess;
+			Object.defineProperty(Document.prototype, 'cookie', {
+				configurable: true,
+				get() {
+					privacyAccess.cookieReads++;
+					return cookie?.get?.call(this) ?? '';
+				},
+				set(value: string) {
+					privacyAccess.cookieWrites++;
+					cookie?.set?.call(this, value);
+				},
+			});
+			Object.defineProperty(Window.prototype, 'localStorage', {
+				configurable: true,
+				get() {
+					privacyAccess.localStorageReads++;
+					return localStorage?.get?.call(this);
+				},
+			});
+		});
+		const page = await browserContext.newPage();
+
+		await page.goto(trackedPageUrl(trackingId, '/private-form?email=ada%40example.com#payment', 'no-referrer').href);
+		await waitForEvents(1);
+		await page.evaluate(() => {
+			const form = document.createElement('form');
+			const input = document.createElement('input');
+			input.name = 'credit-card';
+			input.value = '4111111111111111';
+			form.append(input);
+			document.body.append(form);
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+			input.dispatchEvent(new Event('change', { bubbles: true }));
+			form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+		});
+		await page.waitForTimeout(100);
+
+		assert.deepEqual(
+			await page.evaluate(
+				() =>
+					(
+						window as unknown as Window & {
+							__privacyAccess: { cookieReads: number; cookieWrites: number; localStorageReads: number };
+						}
+					).__privacyAccess,
+			),
+			{
+				cookieReads: 0,
+				cookieWrites: 0,
+				localStorageReads: 0,
+			},
+		);
+		const events = await db.selectFrom('events').select(['name', 'path', 'properties']).execute();
+		assert.deepEqual(events, [{ name: '$pageview', path: '/private-form', properties: null }]);
+		assert.notInclude(JSON.stringify(events), 'ada@example.com');
+		assert.notInclude(JSON.stringify(events), '4111111111111111');
+	});
+
+	test('blocks pageviews, SPA navigation, custom events, batches, and identification when DNT is enabled', async ({
+		assert,
+		browserContext,
+	}) => {
+		const trackingId = await createWebsite('product');
 		await browserContext.addInitScript(
 			"Object.defineProperty(Navigator.prototype, 'doNotTrack', { configurable: true, get: () => '1' })",
 		);
 		const page = await browserContext.newPage();
 
 		await page.goto(trackedPageUrl(trackingId, '/tracked-page-private', 'no-referrer').href);
-		const tracked = await page.evaluate(() => window.boringAnalytics?.track('signup'));
+		const results = await page.evaluate(() => {
+			history.pushState({}, '', '/private-spa?secret=value#section');
+			return [
+				window.boringAnalytics?.track('signup'),
+				window.boringAnalytics?.trackBatch([{ name: 'signup' }, { name: 'checkout' }]),
+				window.boringAnalytics?.identify('account_opaque_a'),
+			];
+		});
 		await page.waitForTimeout(200);
 
-		assert.isFalse(tracked);
+		assert.deepEqual(results, [false, false, false]);
 		assert.lengthOf(await db.selectFrom('events').select('id').execute(), 0);
 	});
 });

@@ -112,6 +112,111 @@ test.group('Website overview query', (group) => {
 		assert.isNull(await overviewQuery.execute(website.id, outsider.id, new Date('2026-03-30T12:00:00.000Z')));
 	});
 
+	test('reports bounded technical breakdowns by pageviews with Unknown distinct from aggregated Other', async ({
+		assert,
+	}) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		const otherWebsite = await createWebsite(owner.id, 'Documentation', 'docs.boring.money');
+		const dimensions = [
+			...technicalPageviews(website.id, 'Chrome', 'Windows', 'Desktop', 5),
+			...technicalPageviews(website.id, 'Edge', 'Windows', 'Desktop', 4),
+			...technicalPageviews(website.id, 'Firefox', 'Linux', 'Desktop', 3),
+			...technicalPageviews(website.id, 'Safari', 'macOS', 'Desktop', 2),
+			...technicalPageviews(website.id, 'Bot', 'Unknown', 'Bot', 1),
+			...technicalPageviews(website.id, 'Other', 'Other', 'Other', 2),
+			...technicalPageviews(website.id, null, null, null, 2),
+			...technicalPageviews(website.id, 'Unknown', 'Unknown', 'Unknown', 2),
+			...technicalPageviews(otherWebsite.id, 'Chrome', 'Android', 'Mobile', 10),
+		];
+		await db.insertInto('events').values(dimensions).execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.deepEqual(overview?.technicalBreakdowns, {
+			metric: 'pageviews',
+			browsers: [
+				{ name: 'Chrome', pageviews: 5 },
+				{ name: 'Edge', pageviews: 4 },
+				{ name: 'Unknown', pageviews: 4 },
+				{ name: 'Firefox', pageviews: 3 },
+				{ name: 'Other', pageviews: 3 },
+				{ name: 'Safari', pageviews: 2 },
+			],
+			operatingSystems: [
+				{ name: 'Windows', pageviews: 9 },
+				{ name: 'Unknown', pageviews: 5 },
+				{ name: 'Linux', pageviews: 3 },
+				{ name: 'Other', pageviews: 2 },
+				{ name: 'macOS', pageviews: 2 },
+			],
+			devices: [
+				{ name: 'Desktop', pageviews: 14 },
+				{ name: 'Unknown', pageviews: 4 },
+				{ name: 'Other', pageviews: 2 },
+				{ name: 'Bot', pageviews: 1 },
+			],
+		});
+		for (const breakdown of [
+			overview!.technicalBreakdowns.browsers,
+			overview!.technicalBreakdowns.operatingSystems,
+			overview!.technicalBreakdowns.devices,
+		]) {
+			assert.equal(
+				breakdown.reduce((total, row) => total + row.pageviews, 0),
+				overview!.metrics.pageviews,
+			);
+		}
+	});
+
+	test('uses the selected 7, 30, or 90 day period for technical breakdowns', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		await db
+			.insertInto('events')
+			.values([
+				pageview(website.id, '2026-03-28T12:00:00.000Z', {
+					anonymousId: 'recent',
+					sessionId: randomUUID(),
+					browser: 'Chrome',
+					operatingSystem: 'Windows',
+					device: 'Desktop',
+				}),
+				pageview(website.id, '2026-03-15T12:00:00.000Z', {
+					anonymousId: 'monthly',
+					sessionId: randomUUID(),
+					browser: 'Safari',
+					operatingSystem: 'macOS',
+					device: 'Desktop',
+				}),
+				pageview(website.id, '2026-01-20T12:00:00.000Z', {
+					anonymousId: 'quarterly',
+					sessionId: randomUUID(),
+					browser: 'Firefox',
+					operatingSystem: 'Linux',
+					device: 'Desktop',
+				}),
+			])
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const now = new Date('2026-03-30T12:00:00.000Z');
+
+		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 7))?.technicalBreakdowns.browsers, [
+			{ name: 'Chrome', pageviews: 1 },
+		]);
+		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 30))?.technicalBreakdowns.browsers, [
+			{ name: 'Chrome', pageviews: 1 },
+			{ name: 'Safari', pageviews: 1 },
+		]);
+		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 90))?.technicalBreakdowns.browsers, [
+			{ name: 'Chrome', pageviews: 1 },
+			{ name: 'Firefox', pageviews: 1 },
+			{ name: 'Safari', pageviews: 1 },
+		]);
+	});
+
 	test('compares a selected 7-day period with the preceding 7 Website-local dates', async ({ assert }) => {
 		const owner = await createUser('Ada', 'ada@example.com');
 		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
@@ -544,6 +649,9 @@ function pageview(
 		utmSource?: string;
 		utmMedium?: string;
 		utmCampaign?: string;
+		browser?: string | null;
+		operatingSystem?: string | null;
+		device?: string | null;
 	},
 ) {
 	return {
@@ -559,5 +667,26 @@ function pageview(
 		utm_source: options.utmSource,
 		utm_medium: options.utmMedium,
 		utm_campaign: options.utmCampaign,
+		browser: options.browser,
+		operating_system: options.operatingSystem,
+		device: options.device,
 	};
+}
+
+function technicalPageviews(
+	websiteId: string,
+	browser: string | null,
+	operatingSystem: string | null,
+	device: string | null,
+	count: number,
+) {
+	return Array.from({ length: count }, (_, index) =>
+		pageview(websiteId, `2026-03-${String(index + 1).padStart(2, '0')}T12:00:00.000Z`, {
+			anonymousId: `${browser ?? 'unknown'}-${index}`,
+			sessionId: randomUUID(),
+			browser,
+			operatingSystem,
+			device,
+		}),
+	);
 }

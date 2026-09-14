@@ -42,11 +42,11 @@ test.group('Owner data export download', (group) => {
 		assert.equal(download.contentType, 'application/x-ndjson; charset=utf-8');
 		assert.match(
 			download.contentDisposition ?? '',
-			/^attachment; filename="boring-analytics-export-v1-\d{4}-\d{2}-\d{2}\.jsonl"$/u,
+			/^attachment; filename="boring-analytics-export-v2-\d{4}-\d{2}-\d{2}\.jsonl"$/u,
 		);
 		assert.equal(download.cacheControl, 'private, no-store');
 		const schemaVersion = (JSON.parse(download.body.trim()) as { schemaVersion: number }).schemaVersion;
-		assert.equal(schemaVersion, 1);
+		assert.equal(schemaVersion, 2);
 		assert.include(download.contentDisposition ?? '', `export-v${schemaVersion}-`);
 	});
 });

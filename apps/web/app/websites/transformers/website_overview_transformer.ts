@@ -16,6 +16,7 @@ export default class WebsiteOverviewTransformer extends BaseTransformer<WebsiteO
 			'utmSources',
 			'utmMediums',
 			'utmCampaigns',
+			'technicalBreakdowns',
 		]);
 	}
 }

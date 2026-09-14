@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import { EventSource } from '#collection/event_source';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import type { EventProperties } from '#collection/browser_event_protocol';
+import type { TechnicalDimensions } from '#collection/technical_dimensions';
 
 interface EventIdentity {
 	anonymousId: string | null;
@@ -16,7 +17,7 @@ interface IdentifiedEvent {
 	batchPosition?: number;
 }
 
-export interface BrowserEvent extends EventIdentity, IdentifiedEvent {
+export interface BrowserEvent extends EventIdentity, IdentifiedEvent, TechnicalDimensions {
 	name: string;
 	occurredAt: Date;
 	path: string;
@@ -34,7 +35,7 @@ export interface ServerEvent extends EventIdentity, IdentifiedEvent {
 	properties: EventProperties;
 }
 
-interface BrowserIdentification extends IdentifiedEvent {
+interface BrowserIdentification extends IdentifiedEvent, TechnicalDimensions {
 	occurredAt: Date;
 	path: string;
 	anonymousId: string;
@@ -85,6 +86,9 @@ export class EventRepository {
 				utm_medium: event.utmMedium,
 				utm_campaign: event.utmCampaign,
 				properties: event.properties,
+				browser: event.browser,
+				operating_system: event.operatingSystem,
+				device: event.device,
 				anonymous_id: event.anonymousId,
 				session_id: event.sessionId,
 				distinct_id: event.distinctId,
@@ -114,6 +118,9 @@ export class EventRepository {
 				utm_medium: null,
 				utm_campaign: null,
 				properties: null,
+				browser: identification.browser,
+				operating_system: identification.operatingSystem,
+				device: identification.device,
 			})
 			.onConflict((conflict) => conflict.doNothing())
 			.execute();
@@ -133,6 +140,9 @@ export class EventRepository {
 				occurred_at: event.occurredAt,
 				path: event.path,
 				properties: event.properties,
+				browser: null,
+				operating_system: null,
+				device: null,
 				anonymous_id: event.anonymousId,
 				session_id: event.sessionId,
 				distinct_id: event.distinctId,

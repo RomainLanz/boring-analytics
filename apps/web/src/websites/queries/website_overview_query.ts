@@ -12,6 +12,11 @@ interface RankedVisitors {
 	visitors: number;
 }
 
+interface RankedPageviews {
+	name: string;
+	pageviews: number;
+}
+
 interface SessionMetricsAggregate {
 	sessions: number;
 	bounce_rate: number | null;
@@ -63,6 +68,12 @@ export interface WebsiteOverview {
 	utmSources: RankedVisitors[];
 	utmMediums: RankedVisitors[];
 	utmCampaigns: RankedVisitors[];
+	technicalBreakdowns: {
+		metric: 'pageviews';
+		browsers: RankedPageviews[];
+		operatingSystems: RankedPageviews[];
+		devices: RankedPageviews[];
+	};
 }
 
 @inject()
@@ -181,6 +192,9 @@ export class WebsiteOverviewQuery {
 			utmSources,
 			utmMediums,
 			utmCampaigns,
+			browsers,
+			operatingSystems,
+			devices,
 		] = await Promise.all([
 			pageviews
 				.select([
@@ -264,6 +278,27 @@ export class WebsiteOverviewQuery {
 				.orderBy('events.utm_campaign')
 				.limit(6)
 				.execute(),
+			pageviews
+				.select([
+					sql<string>`coalesce(events.browser, 'Unknown')`.as('name'),
+					sql<number>`count(*)::integer`.as('pageviews'),
+				])
+				.groupBy(sql`coalesce(events.browser, 'Unknown')`)
+				.execute(),
+			pageviews
+				.select([
+					sql<string>`coalesce(events.operating_system, 'Unknown')`.as('name'),
+					sql<number>`count(*)::integer`.as('pageviews'),
+				])
+				.groupBy(sql`coalesce(events.operating_system, 'Unknown')`)
+				.execute(),
+			pageviews
+				.select([
+					sql<string>`coalesce(events.device, 'Unknown')`.as('name'),
+					sql<number>`count(*)::integer`.as('pageviews'),
+				])
+				.groupBy(sql`coalesce(events.device, 'Unknown')`)
+				.execute(),
 		]);
 
 		const dailyCounts = new Map(dailyPageviews.map((day) => [day.date, day.pageviews]));
@@ -338,9 +373,38 @@ export class WebsiteOverviewQuery {
 			utmSources,
 			utmMediums,
 			utmCampaigns,
+			technicalBreakdowns: {
+				metric: 'pageviews',
+				browsers: boundedTechnicalBreakdown(browsers),
+				operatingSystems: boundedTechnicalBreakdown(operatingSystems),
+				devices: boundedTechnicalBreakdown(devices),
+			},
 			sessionMetrics: sessionMetricsResult,
 		};
 	}
+}
+
+const maximumTechnicalBreakdownRows = 6;
+
+function boundedTechnicalBreakdown(rows: RankedPageviews[]) {
+	const unknown = rows.find(({ name }) => name === 'Unknown');
+	const explicitOther = rows.find(({ name }) => name === 'Other')?.pageviews ?? 0;
+	const named = rows.filter(({ name }) => name !== 'Unknown' && name !== 'Other').sort(compareRankedPageviews);
+	const availableNamedRows = maximumTechnicalBreakdownRows - (unknown ? 1 : 0);
+	const needsAggregate = named.length + (explicitOther > 0 ? 1 : 0) > availableNamedRows;
+	const kept = needsAggregate ? named.slice(0, Math.max(availableNamedRows - 1, 0)) : named;
+	const aggregatedOther = explicitOther + named.slice(kept.length).reduce((total, row) => total + row.pageviews, 0);
+	const result = [
+		...kept,
+		...(aggregatedOther > 0 ? [{ name: 'Other', pageviews: aggregatedOther }] : []),
+		...(unknown ? [unknown] : []),
+	];
+
+	return result.sort(compareRankedPageviews);
+}
+
+function compareRankedPageviews(first: RankedPageviews, second: RankedPageviews) {
+	return second.pageviews - first.pageviews || (first.name < second.name ? -1 : first.name > second.name ? 1 : 0);
 }
 
 function toSessionMetrics(

@@ -11,6 +11,7 @@ import { type InertiaProps } from '~/types';
 
 type PageProps = InertiaProps<{ overview: Data.Websites.WebsiteOverview; trackerUrl: string }>;
 type AcquisitionDimension = 'Referrers' | 'UTM sources' | 'UTM media' | 'UTM campaigns';
+type TechnicalDimension = 'Browser' | 'Operating system' | 'Device';
 
 interface RankedVisitors {
 	name: string;
@@ -140,6 +141,10 @@ function AvailableTrafficReport({
 				/>
 			</Card>
 
+			<div className="mt-8">
+				<TechnicalBreakdowns breakdowns={overview.technicalBreakdowns} />
+			</div>
+
 			<div className="mt-8 grid gap-5 lg:grid-cols-2">
 				<Report title="Top pages">
 					{overview.topPages.length ? (
@@ -206,6 +211,98 @@ function AvailableTrafficReport({
 				</Report>
 			</div>
 		</>
+	);
+}
+
+function TechnicalBreakdowns({ breakdowns }: { breakdowns: Data.Websites.WebsiteOverview['technicalBreakdowns'] }) {
+	const [activeDimension, setActiveDimension] = useState<TechnicalDimension>('Browser');
+	const dimensions = [
+		{ label: 'Browser', plural: 'Browsers', items: breakdowns.browsers },
+		{ label: 'Operating system', plural: 'Operating systems', items: breakdowns.operatingSystems },
+		{ label: 'Device', plural: 'Devices', items: breakdowns.devices },
+	] as const;
+
+	return (
+		<Report
+			title="Technology"
+			description="Pageviews in this period"
+			actions={
+				<div className="flex items-center gap-4 sm:hidden" aria-label="Technology dimension">
+					{dimensions.map(({ label }) => (
+						<button
+							type="button"
+							key={label}
+							aria-pressed={activeDimension === label}
+							className={`${activeDimension === label ? 'border-ink text-ink' : 'text-muted border-transparent'} hover:text-ink -mb-3 cursor-pointer border-b-2 pb-3 text-xs font-medium transition-colors`}
+							onClick={() => setActiveDimension(label)}
+						>
+							{label}
+						</button>
+					))}
+				</div>
+			}
+		>
+			<div className="sm:grid sm:grid-cols-3">
+				{dimensions.map(({ label, plural, items }, index) => (
+					<div
+						key={label}
+						className={`${activeDimension === label ? 'block' : 'hidden'} border-border sm:block ${index < dimensions.length - 1 ? 'sm:border-r' : ''}`}
+					>
+						<TechnicalBreakdown title={label} plural={plural} items={items} />
+					</div>
+				))}
+			</div>
+		</Report>
+	);
+}
+
+function TechnicalBreakdown({
+	title,
+	plural,
+	items,
+}: {
+	title: string;
+	plural: string;
+	items: Array<{ name: string; pageviews: number }>;
+}) {
+	if (!items.length) {
+		return (
+			<>
+				<h3 className="bg-surface-muted text-muted border-border border-b px-4 py-2 text-xs font-medium uppercase">
+					{title}
+				</h3>
+				<EmptyReport message={`No ${plural.toLowerCase()} recorded in this period.`} />
+			</>
+		);
+	}
+
+	return (
+		<table className="w-full table-fixed text-sm">
+			<caption className="sr-only">{plural} by pageviews</caption>
+			<thead className="bg-surface-muted text-muted text-xs font-medium uppercase">
+				<tr>
+					<th scope="col" className="px-4 py-2 text-left">
+						{title}
+					</th>
+					<th scope="col" className="w-24 px-4 py-2 text-right">
+						Pageviews
+					</th>
+				</tr>
+			</thead>
+			<tbody>
+				{items.map((item) => (
+					<tr key={item.name} className="border-border border-t">
+						<th scope="row" className="text-ink p-0 text-left font-normal">
+							<div className="relative flex min-h-11 items-center px-4">
+								<RowBar value={item.pageviews} maximum={items[0].pageviews} />
+								<span className="relative truncate">{item.name}</span>
+							</div>
+						</th>
+						<td className="text-ink px-4 text-right tabular-nums">{formatNumber(item.pageviews)}</td>
+					</tr>
+				))}
+			</tbody>
+		</table>
 	);
 }
 
@@ -358,11 +455,24 @@ function formatMetricChange(
 	return `${arrow} ${amount}${suffix} vs previous ${periodDays} days`;
 }
 
-function Report({ title, actions, children }: { title: string; actions?: React.ReactNode; children: React.ReactNode }) {
+function Report({
+	title,
+	description,
+	actions,
+	children,
+}: {
+	title: string;
+	description?: string;
+	actions?: React.ReactNode;
+	children: React.ReactNode;
+}) {
 	return (
 		<section className="rounded-card border-border bg-surface shadow-card overflow-hidden border">
 			<header className="border-border flex min-h-12 flex-col items-stretch justify-between gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
-				<h2 className="text-ink shrink-0 text-sm font-semibold">{title}</h2>
+				<div className="shrink-0">
+					<h2 className="text-ink text-sm font-semibold">{title}</h2>
+					{description ? <p className="text-muted mt-0.5 text-xs">{description}</p> : null}
+				</div>
 				{actions}
 			</header>
 			{children}

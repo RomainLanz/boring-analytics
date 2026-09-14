@@ -64,6 +64,9 @@ test.group('Websites', (group) => {
 					referrer: 'https://google.com/search',
 					utm_source: 'newsletter',
 					utm_medium: 'email',
+					browser: 'Chrome',
+					operating_system: 'Windows',
+					device: 'Desktop',
 				},
 				{
 					id: randomUUID(),
@@ -74,6 +77,9 @@ test.group('Websites', (group) => {
 					path: '/pricing',
 					anonymous_id: 'visitor-a',
 					session_id: sessionA,
+					browser: 'Safari',
+					operating_system: 'iOS',
+					device: 'Mobile',
 				},
 				{
 					id: randomUUID(),
@@ -152,6 +158,22 @@ test.group('Websites', (group) => {
 		await topPages.getByRole('columnheader', { name: 'Pageviews', exact: true }).waitFor();
 		await topPages.getByRole('rowheader', { name: '/pricing', exact: true }).waitFor();
 		await createPage.getByRole('table', { name: 'Referrers by visitors' }).waitFor();
+		const browsers = createPage.getByRole('table', { name: 'Browsers by pageviews' });
+		const operatingSystems = createPage.getByRole('table', { name: 'Operating systems by pageviews' });
+		const devices = createPage.getByRole('table', { name: 'Devices by pageviews' });
+		assert.deepEqual(await browsers.getByRole('rowheader').allTextContents(), ['Chrome', 'Safari', 'Unknown']);
+		assert.deepEqual(await operatingSystems.getByRole('rowheader').allTextContents(), ['Unknown', 'Windows', 'iOS']);
+		assert.deepEqual(await devices.getByRole('rowheader').allTextContents(), ['Desktop', 'Mobile', 'Unknown']);
+		await createPage.setViewportSize({ width: 390, height: 844 });
+		assert.isTrue(await browsers.isVisible());
+		assert.isFalse(await operatingSystems.isVisible());
+		await createPage.getByRole('button', { name: 'Operating system' }).click();
+		assert.isFalse(await browsers.isVisible());
+		assert.isTrue(await operatingSystems.isVisible());
+		await createPage.setViewportSize({ width: 1280, height: 720 });
+		assert.isTrue(await browsers.isVisible());
+		assert.isTrue(await operatingSystems.isVisible());
+		assert.isTrue(await devices.isVisible());
 		await createPage.getByRole('button', { name: 'UTM sources' }).click();
 		await createPage
 			.getByRole('table', { name: 'UTM sources by visitors' })
@@ -187,6 +209,7 @@ test.group('Websites', (group) => {
 		await createPage.reload();
 		await createPage.getByRole('heading', { name: 'This report is unavailable' }).waitFor();
 		assert.equal(await createPage.getByRole('region', { name: 'Visit summary' }).count(), 0);
+		assert.equal(await createPage.getByRole('heading', { name: 'Technology', exact: true }).count(), 0);
 
 		await db
 			.updateTable('websites')
