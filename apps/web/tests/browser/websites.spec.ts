@@ -103,6 +103,24 @@ test.group('Websites', (group) => {
 					path: '/signup',
 					properties: { 'plan': 'free', 'plan ': 'next', 'trial': false, 'variant': true },
 				},
+				{
+					id: randomUUID(),
+					website_id: website.id,
+					name: 'signup',
+					source: EventSource.Server,
+					occurred_at: new Date(),
+					path: '/signup',
+					properties: { plan: 'pro', trial: false },
+				},
+				{
+					id: randomUUID(),
+					website_id: website.id,
+					name: 'checkout_started',
+					source: EventSource.Browser,
+					occurred_at: new Date(),
+					path: '/checkout',
+					properties: { step: 1 },
+				},
 			])
 			.execute();
 		await createPage.reload();
@@ -179,26 +197,81 @@ test.group('Websites', (group) => {
 		await createPage.waitForURL(/\/websites\/[0-9a-f-]+\/events$/u);
 		const knownEvents = createPage.getByRole('table', { name: 'Known custom events' });
 		await knownEvents.getByRole('link', { name: 'signup', exact: true }).waitFor();
-		await createPage.getByText('Selected custom event', { exact: true }).waitFor();
+		await createPage.getByText('Selected event', { exact: true }).waitFor();
 		assert.equal(
 			await createPage.getByRole('table', { name: 'Daily signup event data' }).locator('tbody tr').count(),
 			30,
 		);
+		const eventsPeriod = createPage.getByRole('navigation', { name: 'Events period' });
+		await eventsPeriod.getByRole('link', { name: '7 days' }).click();
+		await createPage.waitForURL(/period=7/u);
+		assert.equal(
+			await createPage.getByRole('table', { name: 'Daily signup event data' }).locator('tbody tr').count(),
+			7,
+		);
+		await createPage.goto(new URL(`/websites/${website.id}/events?period=invalid`, createPage.url()).href);
+		await createPage.waitForURL(/period=30&event=signup$/u);
+		assert.equal(await eventsPeriod.locator('[aria-current="page"]').textContent(), '30 days');
+
+		await createPage.getByRole('link', { name: /Server/u }).click();
+		await createPage.waitForURL(/source=server/u);
+		await createPage.getByText('Source = Server', { exact: true }).waitFor();
+		await createPage.getByText('Filtered total', { exact: true }).waitFor();
+		await createPage.getByRole('link', { name: 'Clear event filter' }).click();
+		await createPage.waitForURL((url) => !url.searchParams.has('source'));
+
 		await createPage.getByRole('combobox', { name: 'Property key' }).selectOption('plan');
-		await createPage
-			.getByRole('table', { name: 'Top values for plan' })
-			.getByRole('rowheader', { name: '"pro"' })
-			.waitFor();
+		const plans = createPage.getByRole('table', { name: 'Top values for plan' });
+		await plans.getByRole('link', { name: /pro/u }).click();
+		await createPage.waitForURL(/property=plan&value=%22pro%22/u);
+		await createPage.getByText('plan = string "pro"', { exact: true }).waitFor();
+		await createPage.getByText('Top values before filtering', { exact: true }).waitFor();
+		await createPage.getByRole('combobox', { name: 'Selected event' }).selectOption('checkout_started');
+		await createPage.waitForURL(/period=30&event=checkout_started$/u);
+		assert.equal(await createPage.getByRole('link', { name: 'Clear event filter' }).count(), 0);
+		assert.equal(await createPage.getByRole('combobox', { name: 'Property key' }).inputValue(), 'step');
+
+		await createPage.goto(
+			new URL(
+				`/websites/${website.id}/events?period=30&event=checkout_started&property=plan&value=%22pro%22`,
+				createPage.url(),
+			).href,
+		);
+		await createPage.waitForURL(/period=30&event=checkout_started$/u);
+		await createPage.goto(
+			new URL(
+				`/websites/${website.id}/events?period=30&event=signup&source=browser&property=plan&value=%22pro%22`,
+				createPage.url(),
+			).href,
+		);
+		await createPage.waitForURL(/period=30&event=signup$/u);
+		await createPage.goto(
+			new URL(
+				`/websites/${website.id}/events?period=30&event=signup&property=plan&value=%22%5Cu0000%22`,
+				createPage.url(),
+			).href,
+		);
+		await createPage.waitForURL(/period=30&event=signup$/u);
+
 		await createPage.getByRole('combobox', { name: 'Property key' }).selectOption({ value: 'plan ' });
 		assert.equal(await createPage.getByRole('combobox', { name: 'Property key' }).inputValue(), 'plan ');
 		await createPage
 			.getByRole('table', { name: 'Top values for plan' })
-			.getByRole('rowheader', { name: '"legacy"' })
+			.getByRole('rowheader', { name: /legacy/u })
 			.waitFor();
 		await createPage.getByRole('combobox', { name: 'Property key' }).selectOption('variant');
 		const variants = createPage.getByRole('table', { name: 'Top values for variant' });
-		await variants.getByRole('rowheader', { name: '"true"', exact: true }).waitFor();
-		await variants.getByRole('rowheader', { name: 'true', exact: true }).waitFor();
+		await variants.locator('tbody tr').filter({ hasText: 'string"true"' }).waitFor();
+		await variants.locator('tbody tr').filter({ hasText: 'booleantrue' }).waitFor();
+
+		await db
+			.updateTable('websites')
+			.set({ retention_days: null, events_available_from: new Date(now - 10 * 24 * 60 * 60 * 1_000) })
+			.where('id', '=', website.id)
+			.execute();
+		await createPage.goto(new URL(`/websites/${website.id}/events?period=30`, createPage.url()).href);
+		await createPage.getByRole('heading', { name: 'This report is unavailable' }).waitFor();
+		assert.equal(await createPage.getByText('Filtered total', { exact: true }).count(), 0);
 
 		await browserContext.loginAs(outsiderResult.value);
 		const forbiddenPage = await browserContext.newPage();

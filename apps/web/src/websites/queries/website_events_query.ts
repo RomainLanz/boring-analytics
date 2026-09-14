@@ -1,8 +1,9 @@
 import { inject } from '@adonisjs/core';
 import { sql } from 'kysely';
+import { EventSource } from '#collection/event_source';
 import { TransactionManager } from '#shared/services/transaction_manager';
 import { EventDataAvailabilityQuery, type EventDataAvailability } from '#websites/queries/event_data_availability';
-import { websiteReportPeriod } from '#websites/queries/website_report_period';
+import { websiteReportPeriod, type WebsiteReportPeriodPreset } from '#websites/queries/website_report_period';
 import type { EventPropertyValue } from '#collection/browser_event_protocol';
 
 interface PropertyValueRow {
@@ -10,6 +11,10 @@ interface PropertyValueRow {
 	value: EventPropertyValue;
 	count: number;
 }
+
+export type WebsiteEventsFilter =
+	| { kind: 'source'; value: 'browser' | 'server' }
+	| { kind: 'property'; key: string; value: EventPropertyValue };
 
 export interface WebsiteEventsReport {
 	website: {
@@ -19,20 +24,30 @@ export interface WebsiteEventsReport {
 		timezone: string;
 	};
 	period: {
+		preset: WebsiteReportPeriodPreset;
 		startDate: string;
 		endDate: string;
 	};
 	dataAvailability: EventDataAvailability;
+	activeFilter: WebsiteEventsFilter | null;
 	events: Array<{ name: string; volume: number }>;
 	selectedEvent: {
 		name: string;
 		volume: number;
+		sources: { browser: number; server: number };
 		trend: Array<{ date: string; volume: number }>;
 		properties: Array<{
 			key: string;
 			values: Array<{ value: EventPropertyValue; count: number }>;
 		}>;
 	} | null;
+}
+
+interface WebsiteEventsQueryOptions {
+	selectedName?: string;
+	now?: Date;
+	periodPreset?: WebsiteReportPeriodPreset;
+	filter?: WebsiteEventsFilter;
 }
 
 @inject()
@@ -45,9 +60,9 @@ export class WebsiteEventsQuery {
 	async execute(
 		websiteId: string,
 		ownerUserId: string,
-		selectedName?: string,
-		now = new Date(),
+		options: WebsiteEventsQueryOptions = {},
 	): Promise<WebsiteEventsReport | null> {
+		const { selectedName, now = new Date(), periodPreset, filter } = options;
 		const database = this.transactions.currentDatabase();
 		const website = await database
 			.selectFrom('websites')
@@ -65,6 +80,7 @@ export class WebsiteEventsQuery {
 			website.id,
 			website.timezone,
 			now,
+			periodPreset,
 		);
 		const events = await database
 			.selectFrom('events')
@@ -94,8 +110,9 @@ export class WebsiteEventsQuery {
 					allowedDomain: website.allowed_domain,
 					timezone: website.timezone,
 				},
-				period: { startDate, endDate },
+				period: { preset: periodPreset ?? 30, startDate, endDate },
 				dataAvailability,
+				activeFilter: null,
 				events,
 				selectedEvent: null,
 			};
@@ -107,14 +124,30 @@ export class WebsiteEventsQuery {
 			.where('events.name', '=', selected.name)
 			.where('events.occurred_at', '>=', periodStart)
 			.where('events.occurred_at', '<', periodEnd);
-		const [dailyEvents, propertyValuesResult] = await Promise.all([
-			selectedEvents
-				.select([
-					sql<string>`to_char(events.occurred_at at time zone ${website.timezone}, 'YYYY-MM-DD')`.as('date'),
-					sql<number>`count(*)::integer`.as('volume'),
-				])
-				.groupBy(sql.ref('date'))
-				.orderBy('date')
+		const activeFilter = await this.#compatibleFilter(filter, website.id, selected.name, periodStart, periodEnd);
+		let filteredEvents = selectedEvents;
+
+		if (activeFilter?.kind === 'source') {
+			filteredEvents = filteredEvents.where(
+				'events.source',
+				'=',
+				activeFilter.value === 'browser' ? EventSource.Browser : EventSource.Server,
+			);
+		} else if (activeFilter?.kind === 'property') {
+			filteredEvents = filteredEvents.where(propertyFilterExpression(activeFilter));
+		}
+		const dailyEventsQuery = filteredEvents
+			.select([
+				sql<string>`to_char(events.occurred_at at time zone ${website.timezone}, 'YYYY-MM-DD')`.as('date'),
+				sql<number>`count(*)::integer`.as('volume'),
+			])
+			.groupBy(sql.ref('date'))
+			.orderBy('date');
+		const [dailyEvents, sourceCounts, propertyValuesResult] = await Promise.all([
+			dailyEventsQuery.execute(),
+			filteredEvents
+				.select(['events.source', sql<number>`count(*)::integer`.as('volume')])
+				.groupBy('events.source')
 				.execute(),
 			sql<PropertyValueRow>`
 				with property_counts as (
@@ -125,6 +158,7 @@ export class WebsiteEventsQuery {
 						and events.name = ${selected.name}
 						and events.occurred_at >= ${periodStart}
 						and events.occurred_at < ${periodEnd}
+						and jsonb_typeof(property.value) in ('string', 'number', 'boolean', 'null')
 					group by property.key, property.value
 				), ranked_values as (
 					select key, value, count,
@@ -139,6 +173,11 @@ export class WebsiteEventsQuery {
 		]);
 		const dailyCounts = new Map(dailyEvents.map((day) => [day.date, day.volume]));
 		const trend = dates.map((date) => ({ date, volume: dailyCounts.get(date) ?? 0 }));
+		const sources = { browser: 0, server: 0 };
+
+		for (const source of sourceCounts) {
+			sources[source.source === EventSource.Browser ? 'browser' : 'server'] = source.volume;
+		}
 		const properties = new Map<string, Array<{ value: EventPropertyValue; count: number }>>();
 
 		for (const row of propertyValuesResult.rows) {
@@ -155,15 +194,46 @@ export class WebsiteEventsQuery {
 				allowedDomain: website.allowed_domain,
 				timezone: website.timezone,
 			},
-			period: { startDate, endDate },
+			period: { preset: periodPreset ?? 30, startDate, endDate },
 			dataAvailability,
+			activeFilter,
 			events,
 			selectedEvent: {
 				name: selected.name,
-				volume: selected.volume,
+				volume: trend.reduce((total, day) => total + day.volume, 0),
+				sources,
 				trend,
 				properties: Array.from(properties, ([key, values]) => ({ key, values })),
 			},
 		};
 	}
+
+	async #compatibleFilter(
+		filter: WebsiteEventsFilter | undefined,
+		websiteId: string,
+		eventName: string,
+		periodStart: Date,
+		periodEnd: Date,
+	) {
+		if (!filter || filter.kind === 'source') {
+			return filter ?? null;
+		}
+
+		const matchingEvent = await this.transactions
+			.currentDatabase()
+			.selectFrom('events')
+			.select(sql<number>`1`.as('exists'))
+			.where('events.website_id', '=', websiteId)
+			.where('events.name', '=', eventName)
+			.where('events.occurred_at', '>=', periodStart)
+			.where('events.occurred_at', '<', periodEnd)
+			.where(propertyFilterExpression(filter))
+			.executeTakeFirst();
+
+		return matchingEvent ? filter : null;
+	}
+}
+
+function propertyFilterExpression(filter: Extract<WebsiteEventsFilter, { kind: 'property' }>) {
+	return sql<boolean>`events.properties ? ${filter.key} and (events.properties -> ${filter.key}) = ${JSON.stringify(filter.value)}::text::jsonb`;
 }
