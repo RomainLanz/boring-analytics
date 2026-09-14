@@ -3,6 +3,14 @@ import type { FunnelReport } from '#funnels/queries/funnel_report_query';
 
 export default class FunnelReportTransformer extends BaseTransformer<FunnelReport> {
 	toObject() {
-		return this.pick(this.resource, ['website', 'period', 'dataAvailability', 'funnel', 'summary', 'steps']);
+		return this.pick(this.resource, [
+			'website',
+			'period',
+			'dataAvailability',
+			'funnel',
+			'summary',
+			'steps',
+			'comparison',
+		]);
 	}
 }

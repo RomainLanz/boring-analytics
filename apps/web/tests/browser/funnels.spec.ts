@@ -44,6 +44,9 @@ test.group('Funnels', (group) => {
 		await summary.getByText('2', { exact: true }).first().waitFor();
 		await summary.getByText('1', { exact: true }).first().waitFor();
 		await summary.getByText('50%', { exact: true }).waitFor();
+		await page.getByText('Current', { exact: true }).first().waitFor();
+		await page.getByText('Previous', { exact: true }).first().waitFor();
+		await page.getByText('New vs previous 30 days', { exact: true }).first().waitFor();
 		await page.getByText('newsletter_opened', { exact: true }).waitFor({ state: 'detached' });
 
 		const funnelId = page.url().split('/').at(-1);
@@ -51,6 +54,23 @@ test.group('Funnels', (group) => {
 		if (!funnelId) {
 			throw new Error('The Funnel id must be present in the report URL');
 		}
+		const periodNavigation = page.getByRole('navigation', { name: 'Funnel period' });
+		assert.equal(await periodNavigation.getByRole('link', { name: '30 days' }).getAttribute('aria-current'), 'page');
+		await periodNavigation.getByRole('link', { name: '7 days' }).click();
+		await page.waitForURL(/\?period=7$/u);
+		assert.equal(await periodNavigation.getByRole('link', { name: '7 days' }).getAttribute('aria-current'), 'page');
+		assert.equal(
+			(
+				await db
+					.selectFrom('funnels')
+					.select('conversion_window_seconds')
+					.where('id', '=', funnelId)
+					.executeTakeFirstOrThrow()
+			).conversion_window_seconds,
+			1_800,
+		);
+		await page.goto(new URL(`?period=14`, page.url()).href);
+		assert.equal(await periodNavigation.getByRole('link', { name: '30 days' }).getAttribute('aria-current'), 'page');
 
 		await db.updateTable('funnels').set('conversion_window_seconds', 900).where('id', '=', funnelId).execute();
 		await page.getByRole('link', { name: 'Edit Funnel' }).click();
@@ -259,6 +279,44 @@ test.group('Funnels', (group) => {
 			await page.getByText('retention settings', { exact: true }).getAttribute('href'),
 			`/websites/${website.id}/settings`,
 		);
+	});
+
+	test('keeps current Funnel metrics when the previous cohort is unavailable', async ({ browserContext, visit }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id);
+		const funnelId = randomUUID();
+		await db.updateTable('websites').set('retention_days', 90).where('id', '=', website.id).execute();
+		await db
+			.insertInto('funnels')
+			.values({
+				id: funnelId,
+				website_id: website.id,
+				name: 'Mature signup',
+				identity_kind: 'distinct_id',
+				conversion_window_seconds: 30 * 24 * 60 * 60,
+			})
+			.execute();
+		await db
+			.insertInto('funnel_steps')
+			.values([
+				{ funnel_id: funnelId, position: 1, event_name: 'pricing_viewed', filter: null },
+				{ funnel_id: funnelId, position: 2, event_name: 'signup', filter: null },
+			])
+			.execute();
+		await db
+			.insertInto('events')
+			.values([
+				productEvent(website.id, 'converted', 'pricing_viewed', new Date(Date.now() - 45 * 24 * 60 * 60_000)),
+				productEvent(website.id, 'converted', 'signup', new Date(Date.now() - 44 * 24 * 60 * 60_000)),
+			])
+			.execute();
+
+		await browserContext.loginAs(owner);
+		const page = await visit(`/websites/${website.id}/funnels/${funnelId}`);
+		const summary = page.getByRole('region', { name: 'Funnel summary' });
+
+		await summary.getByText('1', { exact: true }).first().waitFor();
+		await summary.getByText('Previous 30 days unavailable', { exact: true }).first().waitFor();
 	});
 });
 
