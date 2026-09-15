@@ -32,6 +32,7 @@ services:
       ANONYMOUS_ID_SECRET: ${ANONYMOUS_ID_SECRET:?Set ANONYMOUS_ID_SECRET in .env}
       EVENT_TIME_TOLERANCE_HOURS: ${EVENT_TIME_TOLERANCE_HOURS:-24}
       TRUST_PROXY: ${TRUST_PROXY:-loopback, linklocal, uniquelocal}
+      GEOIP_DATABASE_PATH: ${GEOIP_DATABASE_PATH:-/app/apps/web/data/dbip-country-lite.mmdb}
       DATABASE_URL: postgres://app:${POSTGRES_PASSWORD}@database:5432/app
       SESSION_DRIVER: cookie
     depends_on:

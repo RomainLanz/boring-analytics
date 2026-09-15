@@ -26,6 +26,7 @@ export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 export interface Events {
   anonymous_id: string | null;
   browser: string | null;
+  country: string | null;
   device: string | null;
   distinct_id: string | null;
   event_id: string | null;

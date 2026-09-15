@@ -53,6 +53,7 @@ test.group('POST /api/server/events', (group) => {
 		assert.isNull(event.browser);
 		assert.isNull(event.operating_system);
 		assert.isNull(event.device);
+		assert.isNull(event.country);
 	});
 
 	test('persists reliable Product server events with distinct_id and no browser identity', async ({ assert }) => {

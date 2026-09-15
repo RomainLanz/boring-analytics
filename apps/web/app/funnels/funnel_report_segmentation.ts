@@ -24,7 +24,8 @@ export function parseFunnelReportSegmentation(
 		input.segment === 'path' ||
 		input.segment === 'utm_source' ||
 		input.segment === 'utm_medium' ||
-		input.segment === 'utm_campaign'
+		input.segment === 'utm_campaign' ||
+		input.segment === 'country'
 	) {
 		return { kind: input.segment };
 	}

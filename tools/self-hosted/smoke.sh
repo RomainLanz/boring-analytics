@@ -14,6 +14,12 @@ workdir="$(mktemp -d)"
 cookies="$workdir/cookies"
 backup="$workdir/boring-analytics.dump"
 port="${SMOKE_PORT:-$((40000 + RANDOM % 20000))}"
+expected_country="${SMOKE_EXPECT_COUNTRY:-GB}"
+
+[[ "$expected_country" == 'GB' || "$expected_country" == 'Unknown' ]] || {
+	echo 'SMOKE_EXPECT_COUNTRY must be GB or Unknown' >&2
+	exit 1
+}
 
 export POSTGRES_PASSWORD="smoke-$(openssl rand -hex 16)"
 export APP_KEY="$(openssl rand -base64 32)"
@@ -37,6 +43,7 @@ echo 'Starting a fresh Compose project'
 compose up -d --build --wait
 curl --fail --silent --show-error "$APP_URL/health/live" >/dev/null
 curl --fail --silent --show-error "$APP_URL/health/ready" >/dev/null
+compose exec -T app grep -Fq 'Creative Commons Attribution 4.0 International' /app/apps/web/data/README.md
 
 echo 'Checking the liveness and readiness boundary'
 compose stop database >/dev/null
@@ -90,15 +97,26 @@ occurred_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 event_status="$(curl --silent --show-error \
 	--header 'Content-Type: application/json' \
 	--header 'Origin: http://example.com' \
+	--header 'X-Forwarded-For: 81.2.69.142' \
 	--data "{\"trackingId\":\"$tracking_id\",\"name\":\"\u0024pageview\",\"occurredAt\":\"$occurred_at\",\"path\":\"/smoke-restored\",\"referrer\":null,\"utmSource\":null,\"utmMedium\":null,\"utmCampaign\":null}" \
 	--output /dev/null \
 	--write-out '%{http_code}' \
 	"$APP_URL/api/events")"
 [[ "$event_status" == '202' ]] || { echo "Collector returned HTTP $event_status" >&2; exit 1; }
+stored_country="$(compose exec -T database psql --tuples-only --no-align --username=app --dbname=app \
+	--command="select coalesce(country, 'Unknown') from events where website_id = (select id from websites where tracking_id = '$tracking_id')")"
+[[ "$stored_country" == "$expected_country" ]] || {
+	echo "Collector stored Country $stored_country instead of $expected_country" >&2
+	exit 1
+}
 
 curl --fail --silent --show-error --cookie "$cookies" "$APP_URL$website_path" > "$owner_page"
-grep -Fq '"metrics":{"pageviews":1,"visitors":1,"sessions":1}' "$owner_page" || {
+grep -Fq '"metrics":{"pageviews":1,"visitors":1}' "$owner_page" || {
 	echo 'The owner-scoped dashboard did not report the ingested pageview' >&2
+	exit 1
+}
+grep -Fq "\"countries\":[{\"name\":\"$expected_country\",\"pageviews\":1}]" "$owner_page" || {
+	echo "The owner-scoped dashboard did not report Country $expected_country" >&2
 	exit 1
 }
 
@@ -126,8 +144,12 @@ compose up -d --wait app
 
 curl --fail --silent --show-error "$APP_URL/health/ready" >/dev/null
 curl --fail --silent --show-error --cookie "$cookies" "$APP_URL$website_path" > "$owner_page"
-grep -Fq '"metrics":{"pageviews":1,"visitors":1,"sessions":1}' "$owner_page" || {
+grep -Fq '"metrics":{"pageviews":1,"visitors":1}' "$owner_page" || {
 	echo 'The restored owner-scoped dashboard lost the pageview' >&2
+	exit 1
+}
+grep -Fq "\"countries\":[{\"name\":\"$expected_country\",\"pageviews\":1}]" "$owner_page" || {
+	echo "The restored owner-scoped dashboard lost Country $expected_country" >&2
 	exit 1
 }
 grep -Fq '/smoke-restored' "$owner_page" || { echo 'The restored page path is missing' >&2; exit 1; }

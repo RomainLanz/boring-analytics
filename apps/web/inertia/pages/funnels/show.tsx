@@ -4,6 +4,8 @@ import { type Data } from '@generated/data';
 import { Head, Link, router } from '@inertiajs/react';
 import { Fragment } from 'react';
 import { metricChange, percentagePointChange, type TrafficMetricChange } from '#websites/traffic_metric_change';
+import { CountryName } from '~/components/country-name';
+import { GeoIpAttribution } from '~/components/geoip-attribution';
 import { ReportDataUnavailable } from '~/components/report-data-unavailable';
 import { WebsiteReportHeader } from '~/components/website-report-header';
 import { type InertiaProps } from '~/types';
@@ -225,6 +227,7 @@ function FunnelSegmentation({ report }: { report: AvailableReport }) {
 							<option value="utm_source">UTM source</option>
 							<option value="utm_medium">UTM medium</option>
 							<option value="utm_campaign">UTM campaign</option>
+							<option value="country">Country</option>
 							{propertyKeys.map((key) => (
 								<option key={key} value={`property:${key}`}>
 									Property · {key}
@@ -248,6 +251,7 @@ function FunnelSegmentation({ report }: { report: AvailableReport }) {
 				) : (
 					<SegmentMatrix report={report} segmentation={segmentation} />
 				)}
+				{activeDimension?.kind === 'country' ? <GeoIpAttribution /> : null}
 			</Card>
 		</section>
 	);
@@ -433,9 +437,15 @@ function SegmentValue({
 }) {
 	return (
 		<div className="min-w-0">
-			<span className="text-accent-hover block font-mono text-[10px]">{value.type}</span>
+			{dimension.kind === 'country' ? null : (
+				<span className="text-accent-hover block font-mono text-[10px]">{value.type}</span>
+			)}
 			<strong className="text-ink block text-sm font-semibold break-words">
-				{formatSegmentValue(dimension, value)}
+				{dimension.kind === 'country' && value.type === 'string' && typeof value.value === 'string' ? (
+					<CountryName code={value.value} />
+				) : (
+					formatSegmentValue(dimension, value)
+				)}
 			</strong>
 		</div>
 	);
@@ -448,6 +458,7 @@ function formatDimension(dimension: SegmentationDimension) {
 		utm_source: 'UTM source',
 		utm_medium: 'UTM medium',
 		utm_campaign: 'UTM campaign',
+		country: 'Country',
 	};
 	return dimension.kind === 'property' ? `Property · ${dimension.key}` : labels[dimension.kind];
 }
@@ -457,11 +468,11 @@ function formatSegmentValue(
 	value: Extract<Report['segmentation'], { status: 'available' }>['segments'][number]['value'],
 ) {
 	if (value.type === 'unspecified') {
-		return 'Unspecified';
+		return dimension.kind === 'country' ? 'Unknown' : 'Unspecified';
 	}
 
 	if (value.type === 'other') {
-		return `Other · ${value.valueCount} values`;
+		return `Other · ${value.valueCount} ${dimension.kind === 'country' ? 'countries' : 'values'}`;
 	}
 
 	if (value.type === 'null') {

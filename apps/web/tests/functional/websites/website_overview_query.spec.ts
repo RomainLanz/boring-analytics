@@ -136,6 +136,7 @@ test.group('Website overview query', (group) => {
 
 		assert.deepEqual(overview?.technicalBreakdowns, {
 			metric: 'pageviews',
+			countries: [{ name: 'Unknown', pageviews: 21 }],
 			browsers: [
 				{ name: 'Chrome', pageviews: 5 },
 				{ name: 'Edge', pageviews: 4 },
@@ -159,6 +160,7 @@ test.group('Website overview query', (group) => {
 			],
 		});
 		for (const breakdown of [
+			overview!.technicalBreakdowns.countries,
 			overview!.technicalBreakdowns.browsers,
 			overview!.technicalBreakdowns.operatingSystems,
 			overview!.technicalBreakdowns.devices,
@@ -168,6 +170,41 @@ test.group('Website overview query', (group) => {
 				overview!.metrics.pageviews,
 			);
 		}
+	});
+
+	test('reports bounded Countries by pageviews with Unknown distinct from aggregated Other', async ({ assert }) => {
+		const owner = await createUser('Ada', 'ada@example.com');
+		const website = await createWebsite(owner.id, 'Boring Money', 'boring.money');
+		const otherWebsite = await createWebsite(owner.id, 'Documentation', 'docs.boring.money');
+		await db
+			.insertInto('events')
+			.values([
+				...countryPageviews(website.id, 'CH', 5),
+				...countryPageviews(website.id, 'US', 4),
+				...countryPageviews(website.id, 'DE', 3),
+				...countryPageviews(website.id, 'FR', 2),
+				...countryPageviews(website.id, 'GB', 1),
+				...countryPageviews(website.id, 'JP', 1),
+				...countryPageviews(website.id, null, 2),
+				...countryPageviews(otherWebsite.id, 'CH', 10),
+			])
+			.execute();
+
+		const overviewQuery = await app.container.make(WebsiteOverviewQuery);
+		const overview = await overviewQuery.execute(website.id, owner.id, new Date('2026-03-30T12:00:00.000Z'));
+
+		assert.deepEqual(overview?.technicalBreakdowns.countries, [
+			{ name: 'CH', pageviews: 5 },
+			{ name: 'US', pageviews: 4 },
+			{ name: 'DE', pageviews: 3 },
+			{ name: 'FR', pageviews: 2 },
+			{ name: 'Other', pageviews: 2 },
+			{ name: 'Unknown', pageviews: 2 },
+		]);
+		assert.equal(
+			overview!.technicalBreakdowns.countries.reduce((total, row) => total + row.pageviews, 0),
+			overview!.metrics.pageviews,
+		);
 	});
 
 	test('uses the selected 7, 30, or 90 day period for technical breakdowns', async ({ assert }) => {
@@ -182,6 +219,7 @@ test.group('Website overview query', (group) => {
 					browser: 'Chrome',
 					operatingSystem: 'Windows',
 					device: 'Desktop',
+					country: 'CH',
 				}),
 				pageview(website.id, '2026-03-15T12:00:00.000Z', {
 					anonymousId: 'monthly',
@@ -189,6 +227,7 @@ test.group('Website overview query', (group) => {
 					browser: 'Safari',
 					operatingSystem: 'macOS',
 					device: 'Desktop',
+					country: 'US',
 				}),
 				pageview(website.id, '2026-01-20T12:00:00.000Z', {
 					anonymousId: 'quarterly',
@@ -196,6 +235,7 @@ test.group('Website overview query', (group) => {
 					browser: 'Firefox',
 					operatingSystem: 'Linux',
 					device: 'Desktop',
+					country: 'JP',
 				}),
 			])
 			.execute();
@@ -206,14 +246,26 @@ test.group('Website overview query', (group) => {
 		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 7))?.technicalBreakdowns.browsers, [
 			{ name: 'Chrome', pageviews: 1 },
 		]);
+		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 7))?.technicalBreakdowns.countries, [
+			{ name: 'CH', pageviews: 1 },
+		]);
 		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 30))?.technicalBreakdowns.browsers, [
 			{ name: 'Chrome', pageviews: 1 },
 			{ name: 'Safari', pageviews: 1 },
+		]);
+		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 30))?.technicalBreakdowns.countries, [
+			{ name: 'CH', pageviews: 1 },
+			{ name: 'US', pageviews: 1 },
 		]);
 		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 90))?.technicalBreakdowns.browsers, [
 			{ name: 'Chrome', pageviews: 1 },
 			{ name: 'Firefox', pageviews: 1 },
 			{ name: 'Safari', pageviews: 1 },
+		]);
+		assert.deepEqual((await overviewQuery.execute(website.id, owner.id, now, 90))?.technicalBreakdowns.countries, [
+			{ name: 'CH', pageviews: 1 },
+			{ name: 'JP', pageviews: 1 },
+			{ name: 'US', pageviews: 1 },
 		]);
 	});
 
@@ -652,6 +704,7 @@ function pageview(
 		browser?: string | null;
 		operatingSystem?: string | null;
 		device?: string | null;
+		country?: string | null;
 	},
 ) {
 	return {
@@ -670,6 +723,7 @@ function pageview(
 		browser: options.browser,
 		operating_system: options.operatingSystem,
 		device: options.device,
+		country: options.country,
 	};
 }
 
@@ -687,6 +741,16 @@ function technicalPageviews(
 			browser,
 			operatingSystem,
 			device,
+		}),
+	);
+}
+
+function countryPageviews(websiteId: string, country: string | null, count: number) {
+	return Array.from({ length: count }, (_, index) =>
+		pageview(websiteId, `2026-03-${String(index + 1).padStart(2, '0')}T12:00:00.000Z`, {
+			anonymousId: `${country ?? 'unknown'}-${index}`,
+			sessionId: randomUUID(),
+			country,
 		}),
 	);
 }

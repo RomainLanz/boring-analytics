@@ -70,6 +70,7 @@ export interface WebsiteOverview {
 	utmCampaigns: RankedVisitors[];
 	technicalBreakdowns: {
 		metric: 'pageviews';
+		countries: RankedPageviews[];
 		browsers: RankedPageviews[];
 		operatingSystems: RankedPageviews[];
 		devices: RankedPageviews[];
@@ -192,6 +193,7 @@ export class WebsiteOverviewQuery {
 			utmSources,
 			utmMediums,
 			utmCampaigns,
+			countries,
 			browsers,
 			operatingSystems,
 			devices,
@@ -277,6 +279,13 @@ export class WebsiteOverviewQuery {
 				.orderBy('visitors', 'desc')
 				.orderBy('events.utm_campaign')
 				.limit(6)
+				.execute(),
+			pageviews
+				.select([
+					sql<string>`coalesce(events.country, 'Unknown')`.as('name'),
+					sql<number>`count(*)::integer`.as('pageviews'),
+				])
+				.groupBy(sql`coalesce(events.country, 'Unknown')`)
 				.execute(),
 			pageviews
 				.select([
@@ -375,6 +384,7 @@ export class WebsiteOverviewQuery {
 			utmCampaigns,
 			technicalBreakdowns: {
 				metric: 'pageviews',
+				countries: boundedTechnicalBreakdown(countries),
 				browsers: boundedTechnicalBreakdown(browsers),
 				operatingSystems: boundedTechnicalBreakdown(operatingSystems),
 				devices: boundedTechnicalBreakdown(devices),

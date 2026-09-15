@@ -58,6 +58,7 @@ export default defineConfig({
 		() => import('@adonisjs/auth/auth_provider'),
 		() => import('@adonisjs/limiter/limiter_provider'),
 		() => import('#providers/api_provider'),
+		() => import('#providers/geoip_provider'),
 	],
 
 	/*

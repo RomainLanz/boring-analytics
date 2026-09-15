@@ -372,6 +372,106 @@ test.group('Funnel report query', (group) => {
 		}
 	});
 
+	test('fixes Country segmentation to the entry event across current and previous periods', async ({ assert }) => {
+		const { ownerUserId, websiteId } = await createWebsite();
+		const funnelId = randomUUID();
+		await db
+			.insertInto('funnels')
+			.values({ id: funnelId, website_id: websiteId, name: 'Country conversion', conversion_window_seconds: 1_800 })
+			.execute();
+		await db
+			.insertInto('funnel_steps')
+			.values([
+				{ funnel_id: funnelId, position: 1, event_name: 'entered', filter: null },
+				{ funnel_id: funnelId, position: 2, event_name: 'converted', filter: null },
+			])
+			.execute();
+		await db
+			.insertInto('events')
+			.values([
+				{ ...event(websiteId, 'current-ch', 'entered', '2026-03-20T10:00:00.000Z'), country: 'CH' },
+				{ ...event(websiteId, 'current-ch', 'converted', '2026-03-20T10:01:00.000Z'), country: 'US' },
+				event(websiteId, 'current-unknown', 'entered', '2026-03-21T10:00:00.000Z'),
+				{ ...event(websiteId, 'current-unknown', 'converted', '2026-03-21T10:01:00.000Z'), country: 'CH' },
+				{ ...event(websiteId, 'previous-ch', 'entered', '2026-02-20T10:00:00.000Z'), country: 'CH' },
+				{ ...event(websiteId, 'previous-ch', 'converted', '2026-02-20T10:01:00.000Z'), country: 'FR' },
+			])
+			.execute();
+
+		const query = await app.container.make(FunnelReportQuery);
+		const report = await query.execute(funnelId, websiteId, ownerUserId, new Date('2026-03-30T12:00:00.000Z'), 30, {
+			kind: 'country',
+		});
+
+		assert.deepEqual(report?.segmentation, {
+			status: 'available',
+			dimension: { kind: 'country' },
+			propertyKeys: [],
+			segments: [
+				{
+					value: { type: 'string', value: 'CH' },
+					current: { entrants: 1, converted: 1, conversionRate: 1, totalDropoffs: 0 },
+					previous: { entrants: 1, converted: 1, conversionRate: 1, totalDropoffs: 0 },
+				},
+				{
+					value: { type: 'unspecified' },
+					current: { entrants: 1, converted: 1, conversionRate: 1, totalDropoffs: 0 },
+					previous: { entrants: 0, converted: 0, conversionRate: 0, totalDropoffs: 0 },
+				},
+			],
+		});
+	});
+
+	test('keeps Unknown separate while aggregating low-volume Countries into Other', async ({ assert }) => {
+		const { ownerUserId, websiteId } = await createWebsite();
+		const funnelId = randomUUID();
+		await db
+			.insertInto('funnels')
+			.values({ id: funnelId, website_id: websiteId, name: 'Country ranking', conversion_window_seconds: 1_800 })
+			.execute();
+		await db
+			.insertInto('funnel_steps')
+			.values([
+				{ funnel_id: funnelId, position: 1, event_name: 'entered', filter: null },
+				{ funnel_id: funnelId, position: 2, event_name: 'converted', filter: null },
+			])
+			.execute();
+		await db
+			.insertInto('events')
+			.values([
+				...['AU', 'BR', 'CA', 'CH', 'DE', 'FR', 'GB', 'IN', 'JP', 'US'].map((country) => ({
+					...event(websiteId, country, 'entered', '2026-03-20T10:00:00.000Z'),
+					country,
+				})),
+				event(websiteId, 'unknown', 'entered', '2026-03-20T10:00:00.000Z'),
+			])
+			.execute();
+
+		const query = await app.container.make(FunnelReportQuery);
+		const report = await query.execute(funnelId, websiteId, ownerUserId, new Date('2026-03-30T12:00:00.000Z'), 30, {
+			kind: 'country',
+		});
+
+		assert.equal(report?.segmentation.status, 'available');
+
+		if (report?.segmentation.status === 'available') {
+			assert.deepInclude(
+				report.segmentation.segments.find(({ value }) => value.type === 'unspecified'),
+				{
+					value: { type: 'unspecified' },
+					current: { entrants: 1, converted: 0, conversionRate: 0, totalDropoffs: 1 },
+				},
+			);
+			assert.deepInclude(
+				report.segmentation.segments.find(({ value }) => value.type === 'other'),
+				{
+					value: { type: 'other', valueCount: 2 },
+					current: { entrants: 2, converted: 0, conversionRate: 0, totalDropoffs: 2 },
+				},
+			);
+		}
+	});
+
 	test('aligns typed segment values across periods and aggregates Other from raw counts', async ({ assert }) => {
 		const { ownerUserId, websiteId } = await createWebsite();
 		const funnelId = randomUUID();

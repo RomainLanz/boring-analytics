@@ -3,7 +3,7 @@ import { parseFunnelReportSegmentation } from '#app/funnels/funnel_report_segmen
 
 test.group('Funnel report segmentation', () => {
 	test('parses built-in entry-event dimensions', ({ assert }) => {
-		for (const kind of ['source', 'path', 'utm_source', 'utm_medium', 'utm_campaign'] as const) {
+		for (const kind of ['source', 'path', 'utm_source', 'utm_medium', 'utm_campaign', 'country'] as const) {
 			assert.deepEqual(parseFunnelReportSegmentation({ segment: kind }), { kind });
 		}
 	});

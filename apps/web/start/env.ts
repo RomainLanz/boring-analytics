@@ -24,6 +24,7 @@ const env = await Env.create(new URL('../', import.meta.url), {
 	ANONYMOUS_ID_SECRET: Env.schema.secret(),
 	EVENT_TIME_TOLERANCE_HOURS: Env.schema.number(),
 	TRUST_PROXY: Env.schema.string(),
+	GEOIP_DATABASE_PATH: Env.schema.string.optional(),
 
 	// Database
 	DATABASE_URL: Env.schema.secret(),

@@ -63,6 +63,7 @@ test.group('Websites', (group) => {
 					source: EventSource.Browser,
 					occurred_at: pageviewTimes[0],
 					path: '/pricing',
+					country: 'CH',
 					anonymous_id: 'visitor-a',
 					session_id: sessionA,
 					referrer: 'https://google.com/search',
@@ -79,6 +80,7 @@ test.group('Websites', (group) => {
 					source: EventSource.Browser,
 					occurred_at: pageviewTimes[1],
 					path: '/pricing',
+					country: 'US',
 					anonymous_id: 'visitor-a',
 					session_id: sessionA,
 					browser: 'Safari',
@@ -168,16 +170,40 @@ test.group('Websites', (group) => {
 		const browsers = createPage.getByRole('table', { name: 'Browsers by pageviews' });
 		const operatingSystems = createPage.getByRole('table', { name: 'Operating systems by pageviews' });
 		const devices = createPage.getByRole('table', { name: 'Devices by pageviews' });
+		const countries = createPage.getByRole('table', { name: 'Countries by pageviews' });
+		await countries.getByRole('rowheader', { name: 'Switzerland', exact: true }).waitFor();
+		await countries.getByRole('rowheader', { name: 'United States', exact: true }).waitFor();
+		await countries.getByRole('rowheader', { name: 'Unknown', exact: true }).waitFor();
+		assert.equal(
+			await createPage.getByRole('link', { name: 'DB-IP', exact: true }).getAttribute('href'),
+			'https://db-ip.com',
+		);
 		assert.deepEqual(await browsers.getByRole('rowheader').allTextContents(), ['Chrome', 'Safari', 'Unknown']);
 		assert.deepEqual(await operatingSystems.getByRole('rowheader').allTextContents(), ['Unknown', 'Windows', 'iOS']);
 		assert.deepEqual(await devices.getByRole('rowheader').allTextContents(), ['Desktop', 'Mobile', 'Unknown']);
 		await createPage.setViewportSize({ width: 390, height: 844 });
+		assert.isAbove(
+			(await createPage.getByRole('heading', { name: 'Technology' }).boundingBox())!.y,
+			(await countries.boundingBox())!.y,
+		);
 		assert.isTrue(await browsers.isVisible());
 		assert.isFalse(await operatingSystems.isVisible());
 		await createPage.getByRole('button', { name: 'Operating system' }).click();
 		assert.isFalse(await browsers.isVisible());
 		assert.isTrue(await operatingSystems.isVisible());
 		await createPage.setViewportSize({ width: 1280, height: 720 });
+		const geographyBox = await createPage
+			.getByRole('heading', { name: 'Geography' })
+			.locator('..')
+			.locator('..')
+			.boundingBox();
+		const technologyBox = await createPage
+			.getByRole('heading', { name: 'Technology' })
+			.locator('..')
+			.locator('..')
+			.boundingBox();
+		assert.closeTo(geographyBox!.width, technologyBox!.width, 1);
+		assert.closeTo(geographyBox!.y, technologyBox!.y, 1);
 		assert.isTrue(await browsers.isVisible());
 		assert.isTrue(await operatingSystems.isVisible());
 		assert.isTrue(await devices.isVisible());
@@ -216,6 +242,7 @@ test.group('Websites', (group) => {
 		await createPage.reload();
 		await createPage.getByRole('heading', { name: 'This report is unavailable' }).waitFor();
 		assert.equal(await createPage.getByRole('region', { name: 'Visit summary' }).count(), 0);
+		assert.equal(await createPage.getByRole('heading', { name: 'Geography', exact: true }).count(), 0);
 		assert.equal(await createPage.getByRole('heading', { name: 'Technology', exact: true }).count(), 0);
 
 		await db

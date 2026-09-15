@@ -24,10 +24,14 @@ test.group('Funnels', (group) => {
 			.values([
 				{
 					...event(website.id, 'converted', firstStepName, new Date(now - 60 * 60_000), '/pricing'),
+					country: 'CH',
 					properties: { [longPropertyKey]: 'enterprise' },
 				},
 				event(website.id, 'converted', 'newsletter_opened', new Date(now - 55 * 60_000)),
-				event(website.id, 'converted', finalStepName, new Date(now - 50 * 60_000)),
+				{
+					...event(website.id, 'converted', finalStepName, new Date(now - 50 * 60_000)),
+					country: 'US',
+				},
 				{
 					...event(website.id, 'abandoned', firstStepName, new Date(now - 45 * 60_000), '/pricing'),
 					properties: { [longPropertyKey]: 'starter' },
@@ -129,6 +133,18 @@ test.group('Funnels', (group) => {
 			assert.isAtMost(widths.documentScrollWidth, widths.documentClientWidth);
 		}
 		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.getByLabel('Segment by').selectOption('country');
+		await page.waitForURL(/\?period=30&segment=country$/u);
+		await segmentation.getByRole('columnheader', { name: 'Country' }).waitFor();
+		await segmentation.getByText('Switzerland', { exact: true }).first().waitFor();
+		await segmentation.getByText('Unknown', { exact: true }).first().waitFor();
+		assert.equal(await segmentation.getByText('United States', { exact: true }).count(), 0);
+		assert.equal(await segmentation.getByText('string', { exact: true }).count(), 0);
+		assert.equal(
+			await segmentation.getByRole('link', { name: 'DB-IP', exact: true }).getAttribute('href'),
+			'https://db-ip.com',
+		);
+
 		await page.getByLabel('Segment by').selectOption(`property:${longPropertyKey}`);
 		await page.waitForURL(new RegExp(`segment=property&property=${longPropertyKey}$`, 'u'));
 		const propertyHeader = segmentation.getByRole('columnheader', { name: `Property · ${longPropertyKey}` });

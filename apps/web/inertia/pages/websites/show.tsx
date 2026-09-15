@@ -4,6 +4,8 @@ import { type Data } from '@generated/data';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 import { metricChange, percentagePointChange, type TrafficMetricChange } from '#websites/traffic_metric_change';
+import { CountryName } from '~/components/country-name';
+import { GeoIpAttribution } from '~/components/geoip-attribution';
 import { ReportDataUnavailable } from '~/components/report-data-unavailable';
 import { TrendChart } from '~/components/trend-chart';
 import { WebsiteReportHeader } from '~/components/website-report-header';
@@ -141,9 +143,10 @@ function AvailableTrafficReport({
 				/>
 			</Card>
 
-			<div className="mt-8">
+			<section className="mt-8 grid gap-5 lg:grid-cols-2" aria-label="Geography and technology">
+				<CountryBreakdown countries={overview.technicalBreakdowns.countries} />
 				<TechnicalBreakdowns breakdowns={overview.technicalBreakdowns} />
-			</div>
+			</section>
 
 			<div className="mt-8 grid gap-5 lg:grid-cols-2">
 				<Report title="Top pages">
@@ -211,6 +214,50 @@ function AvailableTrafficReport({
 				</Report>
 			</div>
 		</>
+	);
+}
+
+function CountryBreakdown({
+	countries,
+}: {
+	countries: Data.Websites.WebsiteOverview['technicalBreakdowns']['countries'];
+}) {
+	return (
+		<Report title="Geography" description="Pageviews in this period">
+			{countries.length ? (
+				<table className="w-full table-fixed text-sm">
+					<caption className="sr-only">Countries by pageviews</caption>
+					<thead className="bg-surface-muted text-muted text-xs font-medium uppercase">
+						<tr>
+							<th scope="col" className="px-4 py-2 text-left">
+								Country
+							</th>
+							<th scope="col" className="w-24 px-4 py-2 text-right">
+								Pageviews
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						{countries.map((country) => (
+							<tr key={country.name} className="border-border border-t">
+								<th scope="row" className="text-ink p-0 text-left font-normal">
+									<div className="relative flex min-h-11 items-center px-4">
+										<RowBar value={country.pageviews} maximum={countries[0].pageviews} />
+										<span className="relative min-w-0">
+											<CountryName code={country.name} />
+										</span>
+									</div>
+								</th>
+								<td className="text-ink px-4 text-right tabular-nums">{formatNumber(country.pageviews)}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			) : (
+				<EmptyReport message="No countries recorded in this period." />
+			)}
+			<GeoIpAttribution />
+		</Report>
 	);
 }
 

@@ -16,6 +16,7 @@ interface BrowserEventContext {
 	occurredAt: Date;
 	ip: string;
 	userAgent: string;
+	country: string | null;
 	distinctId?: string;
 	eventId?: string;
 	sessionId?: string;
@@ -116,6 +117,7 @@ export class RecordBrowserEvent {
 				path: params.path,
 				anonymousId: currentIdentity.anonymousId,
 				distinctId: params.distinctId,
+				country: params.country,
 				...technicalDimensions,
 			});
 			await this.websites.markCollectionKeyUsed(target.collectionKeyId, receivedAt);
@@ -146,6 +148,7 @@ export class RecordBrowserEvent {
 			anonymousId: anonymousIdentity?.anonymousId ?? null,
 			sessionId: anonymousIdentity === null ? null : (params.sessionId ?? anonymousIdentity.sessionId),
 			distinctId: identity.value,
+			country: params.country,
 			...technicalDimensions,
 		});
 		await this.websites.markCollectionKeyUsed(target.collectionKeyId, receivedAt);

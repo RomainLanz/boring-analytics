@@ -221,6 +221,18 @@ test.group('POST /api/events', (group) => {
 		assert.notInclude(JSON.stringify(event), userAgent);
 	});
 
+	test('persists only the Country derived from the trusted client IP', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+
+		const response = await postEvent(trackingId, {}, undefined, '', '81.2.69.142');
+
+		assert.equal(response.status, 202);
+		const event = await db.selectFrom('events').selectAll().executeTakeFirstOrThrow();
+		assert.equal(event.country, 'GB');
+		assert.notProperty(event, 'ip');
+		assert.notProperty(event, 'ip_address');
+	});
+
 	test('persists the ephemeral session supplied by the browser tracker', async ({ assert }) => {
 		const { trackingId } = await createWebsite();
 		const sessionId = randomUUID();
@@ -500,6 +512,95 @@ test.group('POST /api/events', (group) => {
 			{ browser: 'Other', operating_system: 'Other', device: 'Other' },
 			{ browser: 'Other', operating_system: 'Other', device: 'Other' },
 		]);
+	});
+
+	test('uses one IPv6-derived Country for pageviews, custom events, and identify in a batch', async ({ assert }) => {
+		const { trackingId } = await createWebsite('example.com', 'product');
+		const occurredAt = new Date().toISOString();
+
+		const response = await postBatch(
+			trackingId,
+			[
+				{
+					name: '$pageview',
+					occurredAt,
+					path: '/',
+					referrer: null,
+					utmSource: null,
+					utmMedium: null,
+					utmCampaign: null,
+				},
+				{ name: 'signup', occurredAt, path: '/', properties: {} },
+				{ name: '$identify', occurredAt, path: '/', distinctId: 'product-a' },
+			],
+			undefined,
+			'2001:218::',
+		);
+
+		assert.equal(response.status, 202);
+		assert.deepEqual(
+			(await db.selectFrom('events').select(['name', 'country']).orderBy('received_at').execute()).map((event) => ({
+				name: event.name,
+				country: event.country,
+			})),
+			[
+				{ name: '$pageview', country: 'JP' },
+				{ name: 'signup', country: 'JP' },
+				{ name: '$identify', country: 'JP' },
+			],
+		);
+	});
+
+	test('does not let an untrusted forwarded hop or country headers spoof Country', async ({ assert }) => {
+		const { trackingId } = await createWebsite();
+		const body = JSON.stringify({
+			trackingId,
+			name: '$pageview',
+			occurredAt: new Date().toISOString(),
+			path: '/',
+			referrer: null,
+			utmSource: null,
+			utmMedium: null,
+			utmCampaign: null,
+		});
+
+		const response = await fetch(endpoint, {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				'origin': 'https://example.com',
+				'x-forwarded-for': '81.2.69.142, 1.1.1.1',
+				'x-real-ip': '81.2.69.142',
+				'cf-ipcountry': 'GB',
+			},
+			body,
+		});
+
+		assert.equal(response.status, 202);
+		assert.isNull((await db.selectFrom('events').select('country').executeTakeFirstOrThrow()).country);
+
+		const directWebsite = await createWebsite('direct.example.com');
+		const directResponse = await fetch(endpoint, {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				'origin': 'https://direct.example.com',
+				'x-real-ip': '81.2.69.142',
+				'cf-ipcountry': 'GB',
+			},
+			body: body.replace(trackingId, directWebsite.trackingId),
+		});
+
+		assert.equal(directResponse.status, 202);
+		assert.isNull(
+			(
+				await db
+					.selectFrom('events')
+					.select('country')
+					.where('website_id', '=', directWebsite.websiteId)
+					.executeTakeFirstOrThrow()
+			).country,
+		);
 	});
 
 	test('rolls back earlier batch events when a later identity rule fails', async ({ assert }) => {

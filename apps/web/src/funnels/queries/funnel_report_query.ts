@@ -24,6 +24,7 @@ export type FunnelSegmentationDimension =
 	| { kind: 'utm_source' }
 	| { kind: 'utm_medium' }
 	| { kind: 'utm_campaign' }
+	| { kind: 'country' }
 	| { kind: 'property'; key: string };
 
 export type FunnelSegmentValue =

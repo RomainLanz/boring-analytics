@@ -29,6 +29,10 @@ Set these values in `.env` before the first start:
 Do not commit `.env`. The repository ignores it. If you change `APP_PORT`, update the local reverse proxy target. If a
 reverse proxy supplies `X-Forwarded-For`, narrow `TRUST_PROXY` to its addresses or CIDRs.
 
+The image embeds a pinned monthly DB-IP Country Lite MMDB and performs Country lookups locally. Its provenance,
+CC BY 4.0 attribution, checksum, update procedure, optional replacement mount, and fail-closed behavior are documented
+in [Country GeoIP data](geoip.md). No GeoIP download or lookup occurs at runtime.
+
 Build and start the installation:
 
 ```bash

@@ -70,6 +70,7 @@ test.group('Owner data export', (group) => {
 					browser: 'Chrome',
 					operating_system: 'Linux',
 					device: 'Desktop',
+					country: 'CH',
 				},
 				rawEvent(secondWebsite.id, 'second-website'),
 				rawEvent(outsiderWebsite.id, 'outsider-secret-event'),
@@ -110,7 +111,7 @@ test.group('Owner data export', (group) => {
 			.map((line) => JSON.parse(line) as { type: string; [key: string]: unknown });
 		assert.deepEqual(records[0], {
 			type: 'boring-analytics-export',
-			schemaVersion: 3,
+			schemaVersion: 4,
 			exportedAt: '2026-04-01T12:00:00.000Z',
 		});
 		assert.equal(records.filter(({ type }) => type === 'website').length, 2);
@@ -139,10 +140,11 @@ test.group('Owner data export', (group) => {
 			browser: null,
 			operatingSystem: null,
 			device: null,
+			country: null,
 		});
 		assert.deepInclude(
 			records.find((record) => record.eventId === 'browser-technical-dimensions'),
-			{ browser: 'Chrome', operatingSystem: 'Linux', device: 'Desktop' },
+			{ browser: 'Chrome', operatingSystem: 'Linux', device: 'Desktop', country: 'CH' },
 		);
 		const microsecondEvents = records.filter(
 			(record) => record.eventId === 'microsecond-first' || record.eventId === 'microsecond-second',

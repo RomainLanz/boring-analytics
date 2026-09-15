@@ -26,6 +26,7 @@ export interface BrowserEvent extends EventIdentity, IdentifiedEvent, TechnicalD
 	utmMedium: string | null;
 	utmCampaign: string | null;
 	properties: EventProperties | null;
+	country: string | null;
 }
 
 export interface ServerEvent extends EventIdentity, IdentifiedEvent {
@@ -40,6 +41,7 @@ interface BrowserIdentification extends IdentifiedEvent, TechnicalDimensions {
 	path: string;
 	anonymousId: string;
 	distinctId: string;
+	country: string | null;
 }
 
 function receivedAt(batchPosition: number | undefined) {
@@ -89,6 +91,7 @@ export class EventRepository {
 				browser: event.browser,
 				operating_system: event.operatingSystem,
 				device: event.device,
+				country: event.country,
 				anonymous_id: event.anonymousId,
 				session_id: event.sessionId,
 				distinct_id: event.distinctId,
@@ -121,6 +124,7 @@ export class EventRepository {
 				browser: identification.browser,
 				operating_system: identification.operatingSystem,
 				device: identification.device,
+				country: identification.country,
 			})
 			.onConflict((conflict) => conflict.doNothing())
 			.execute();
@@ -143,6 +147,7 @@ export class EventRepository {
 				browser: null,
 				operating_system: null,
 				device: null,
+				country: null,
 				anonymous_id: event.anonymousId,
 				session_id: event.sessionId,
 				distinct_id: event.distinctId,

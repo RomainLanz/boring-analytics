@@ -12,6 +12,7 @@ import {
 	isValidEventProperties,
 	isValidSessionId,
 } from '#collection/browser_event_protocol';
+import { GeoIpCountryResolver } from '#collection/services/geoip_country_resolver';
 import { consumeAdditionalCollectionSourceEvents } from '#start/limiter';
 import type { HttpContext } from '@adonisjs/core/http';
 
@@ -142,6 +143,7 @@ async function prepareEvent(
 	request: HttpContext['request'],
 	submittedEvent: unknown,
 	trackingId?: unknown,
+	country?: string | null,
 ): Promise<Prepared<RecordBrowserEventParams>> {
 	if (typeof submittedEvent !== 'object' || submittedEvent === null || Array.isArray(submittedEvent)) {
 		return { ok: false, error: { errors: [{ message: 'Each event must be an object' }] } };
@@ -188,6 +190,7 @@ async function prepareEvent(
 		occurredAt: occurredAt.toJSDate(),
 		ip: request.ip(),
 		userAgent: request.header('user-agent') ?? '',
+		country: country ?? null,
 		distinctId: event.distinctId,
 		eventId: event.eventId,
 		sessionId: event.sessionId,
@@ -214,6 +217,7 @@ export default class RecordBrowserEventController {
 	constructor(
 		private readonly recordBrowserEvent: RecordBrowserEvent,
 		private readonly recordBrowserEventBatch: RecordBrowserEventBatch,
+		private readonly geoIpCountry: GeoIpCountryResolver,
 	) {}
 
 	async execute({ request, response }: HttpContext) {
@@ -227,9 +231,10 @@ export default class RecordBrowserEventController {
 		await consumeAdditionalCollectionSourceEvents(request.ip(), submission.value.records.length);
 
 		const events: RecordBrowserEventParams[] = [];
+		const country = this.geoIpCountry.resolve(request.ip());
 
 		for (const submittedEvent of submission.value.records) {
-			const event = await prepareEvent(request, submittedEvent, submission.value.trackingId);
+			const event = await prepareEvent(request, submittedEvent, submission.value.trackingId, country);
 
 			if (!event.ok) {
 				return response.unprocessableEntity(event.error);
