@@ -47,6 +47,10 @@ test.group('Websites', (group) => {
 		const website = await db.selectFrom('websites').select(['id', 'tracking_id']).executeTakeFirstOrThrow();
 		assert.match(website.tracking_id, /^[0-9a-f-]{36}$/u);
 		const now = Date.now();
+		const currentUtcDay = new Date(now).setUTCHours(0, 0, 0, 0);
+		const pageviewTimes = [40, 35, 31].map(
+			(minutesBeforeCurrentDay) => new Date(currentUtcDay - minutesBeforeCurrentDay * 60 * 1_000),
+		);
 		const sessionA = randomUUID();
 		const sessionB = randomUUID();
 		await db
@@ -57,7 +61,7 @@ test.group('Websites', (group) => {
 					website_id: website.id,
 					name: '$pageview',
 					source: EventSource.Browser,
-					occurred_at: new Date(now - 40 * 60 * 1_000),
+					occurred_at: pageviewTimes[0],
 					path: '/pricing',
 					anonymous_id: 'visitor-a',
 					session_id: sessionA,
@@ -73,7 +77,7 @@ test.group('Websites', (group) => {
 					website_id: website.id,
 					name: '$pageview',
 					source: EventSource.Browser,
-					occurred_at: new Date(now - 35 * 60 * 1_000),
+					occurred_at: pageviewTimes[1],
 					path: '/pricing',
 					anonymous_id: 'visitor-a',
 					session_id: sessionA,
@@ -86,7 +90,7 @@ test.group('Websites', (group) => {
 					website_id: website.id,
 					name: '$pageview',
 					source: EventSource.Browser,
-					occurred_at: new Date(now - 31 * 60 * 1_000),
+					occurred_at: pageviewTimes[2],
 					path: '/docs',
 					anonymous_id: 'visitor-b',
 					session_id: sessionB,
@@ -143,7 +147,10 @@ test.group('Websites', (group) => {
 		const dailyData = createPage.getByRole('table', { name: 'Daily pageviews data' });
 		assert.equal(await dailyData.locator('tbody tr').count(), 30);
 		assert.equal(await dailyData.locator('tbody tr:first-child td:last-child').textContent(), '0');
-		assert.equal(await dailyData.locator('tbody tr:last-child td:last-child').textContent(), '3');
+		assert.equal(await dailyData.locator('tbody tr:last-child td:last-child').textContent(), '0');
+		const pageviewDate = new Date(currentUtcDay - 24 * 60 * 60 * 1_000).toISOString().slice(0, 10);
+		const pageviewDateRow = dailyData.locator(`time[datetime="${pageviewDate}"]`).locator('..').locator('..');
+		assert.equal(await pageviewDateRow.locator('td:last-child').textContent(), '3');
 		const periodNavigation = createPage.getByRole('navigation', { name: 'Traffic period' });
 		await periodNavigation.getByRole('link', { name: '7 days' }).click();
 		await createPage.waitForURL(/\?period=7$/u);
